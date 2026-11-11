@@ -5,7 +5,7 @@ export type ToolId =
   | 'select' | 'node' | 'hand' | 'zoom' | 'bone' | 'ik' | 'weights' | 'pen' | 'rect' | 'ellipse' | 'polygon'
   | 'star' | 'line' | 'brush' | 'eraser' | 'fill' | 'text' | 'camera';
 
-export type DialogId = 'export' | 'settings' | 'characterCreator' | 'newProject' | 'shortcuts' | 'actionSave' | null;
+export type DialogId = 'export' | 'settings' | 'characterCreator' | 'newProject' | 'shortcuts' | 'actionSave' | 'trace' | null;
 
 export interface KeyRef {
   target: ID;

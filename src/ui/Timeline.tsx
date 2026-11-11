@@ -7,7 +7,7 @@ import { exposureFrames } from '../core/drawing';
 import { allIds } from '../core/tree';
 import { CAMERA_ID, type ActionStrip, type AudioClip, type Ease, type ID, type Keyframe, type Project, type Scene } from '../core/types';
 import { getPeaks } from '../audio/engine';
-import { applyLipSync, lipSyncAvailable } from '../audio/lipsyncApply';
+import { applyLipSync } from '../audio/lipsyncApply';
 import { actionTarget } from './Panels';
 import {
   addMarker, clearTrack, currentValue, deleteKeys, jumpKey, moveKeys, patchAudioClip, patchScene, patchStrip, removeAudioClip, removeMarker,
@@ -91,6 +91,7 @@ export function Timeline() {
   const [scroll, setScroll] = useState({ x: 0, y: 0 });
   const [size, setSize] = useState({ w: 600, h: 180 });
   const [box, setBox] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const [lipSync, setLipSync] = useState({ sensitivity: 1, minHold: 2 });
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<Drag | null>(null);
@@ -589,21 +590,26 @@ export function Timeline() {
             <span className="chip">{audio.name}</span>
             <div style={{ width: 96 }}><NumberField label="Volume" value={audio.volume} min={0} max={2} step={0.02} onChange={(v) => patchAudioClip(audio.id, { volume: v }, 'audiovol')} /></div>
             <button className={`btn${audio.muted ? ' primary' : ''}`} onClick={() => patchAudioClip(audio.id, { muted: !audio.muted })}>{audio.muted ? 'Muted' : 'Mute'}</button>
-            {lipSyncAvailable && (
-              <button
-                className="btn"
-                title="Keys the selected character's mouth to this audio. The mouth shapes land on the timeline as normal keyframes you can adjust."
-                onClick={() => {
-                  const target = actionTarget(scene, selection) ?? Object.values(scene.nodes).find((n) => n.type === 'character')?.id;
-                  if (!target || scene.nodes[target].type !== 'character') return ui().toast('Select the character who is speaking first.', 'error');
-                  applyLipSync(audio.id, target)
-                    .then((n) => ui().toast(`Lip-synced ${scene.nodes[target].name}: ${n} mouth shapes. Adjust them on the "mouth" track.`, 'success'))
-                    .catch((err) => ui().toast(err instanceof Error ? err.message : String(err), 'error'));
-                }}
-              >
-                Lip-sync
-              </button>
-            )}
+            <span className="chip" title="Auto lip-sync keys the speaking character's mouth from this audio. Change the two settings and press Lip-sync again to redo it; every mouth shape is a normal keyframe on the character's mouth track that you can move, change or delete.">Lip-sync</span>
+            <div style={{ width: 104 }} title="How readily the mouth opens. Raise it if the mouth stays shut on quiet speech; lower it if background noise moves the mouth.">
+              <NumberField label="Sensitivity" value={lipSync.sensitivity} min={0.25} max={4} step={0.05} onChange={(v) => setLipSync((s) => ({ ...s, sensitivity: v }))} />
+            </div>
+            <div style={{ width: 84 }} title="Shortest time a mouth shape is held, in frames. Higher is calmer, lower is snappier.">
+              <NumberField label="Hold" value={lipSync.minHold} min={1} max={12} precision={0} onChange={(v) => setLipSync((s) => ({ ...s, minHold: Math.round(v) }))} />
+            </div>
+            <button
+              className="btn primary"
+              title="Keys the selected character's mouth to this audio."
+              onClick={() => {
+                const target = actionTarget(scene, selection) ?? Object.values(scene.nodes).find((n) => n.type === 'character')?.id;
+                if (!target || scene.nodes[target].type !== 'character') return ui().toast('Select the character who is speaking first.', 'error');
+                applyLipSync(audio.id, target, lipSync)
+                  .then((n) => ui().toast(`Lip-synced ${scene.nodes[target].name}: ${n} mouth shapes. Adjust them on the "mouth" track, or change the settings and run it again.`, 'success'))
+                  .catch((err) => ui().toast(err instanceof Error ? err.message : String(err), 'error'));
+              }}
+            >
+              Apply
+            </button>
             <button className="icon-btn" title="Remove clip (Delete)" onClick={() => { removeAudioClip(audio.id); set({ selectedAudio: null }); }}><Trash2 size={14} /></button>
           </>
         )}

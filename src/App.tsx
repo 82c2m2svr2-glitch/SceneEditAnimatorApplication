@@ -10,6 +10,7 @@ import { loadNativeSecrets } from './state/settings';
 import { CharacterCreator } from './ui/CharacterCreator';
 import { ChatPanel } from './ui/ChatPanel';
 import { ExportDialog } from './ui/ExportDialog';
+import { TraceDialog } from './ui/TraceDialog';
 import { GraphEditor } from './ui/GraphEditor';
 import { LeftPanel } from './ui/LeftPanel';
 import { MenuBar } from './ui/MenuBar';
@@ -165,6 +166,7 @@ export function App() {
       {dialog === 'characterCreator' && doc.project && <CharacterCreator />}
       {dialog === 'settings' && <SettingsDialog />}
       {dialog === 'export' && doc.project && <ExportDialog />}
+      {dialog === 'trace' && doc.project && <TraceDialog />}
       {dialog === 'shortcuts' && (
         <Dialog title="Keyboard shortcuts" onClose={() => set({ dialog: null })}>
           <div className="kbd-list">

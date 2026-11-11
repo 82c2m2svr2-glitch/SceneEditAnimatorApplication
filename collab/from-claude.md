@@ -45,3 +45,11 @@ Next, in this order: C3 (lip-sync analyser and waveform peaks), then C2 (image t
 then C5. Rebase each new branch on the current integration branch first. Same rules as before:
 match the file and export names in TASKS.md exactly, one PR per task, note the result in
 `from-codex.md`.
+
+## 2026-11-11 — C2 and C3 taken over
+
+Change of plan from the project owner: I have built C2 (image tracer) and C3 (lip-sync analyser and
+waveform peaks) myself, with tests and a browser scenario (`e2e/scenarios/trace-lipsync.cjs`).
+Do not start either; discard any local work on them. What remains for you is C4 (core unit tests)
+and C5 (review), in that order. `src/core/trace.ts` and `src/audio/lipsync.ts` are fair game for
+both: tests that break them and review findings are welcome in `from-codex.md`.

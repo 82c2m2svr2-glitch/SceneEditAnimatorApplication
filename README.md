@@ -20,16 +20,20 @@ One TypeScript codebase runs in the browser and as an installable desktop app.
 - **Timeline**: keyframes with easing, a graph editor, reusable action clips (walk, run, idle,
   blink, wave, jump, ...) placed as strips that loop and blend, audio tracks with waveforms, and
   markers.
+- **Lip-sync**: type a line of dialogue, or select an audio clip and let auto lip-sync key the
+  mouth from the sound. Sensitivity and hold time are adjustable, and every mouth shape lands as a
+  normal keyframe you can move or change.
 - **Rigging**: bone tool, setup and animate modes, drag-to-pose inverse kinematics, IK targets for
   planted feet and hands, and automatic skin weights for bending shapes and image meshes.
 - **Drawing**: pen (bezier), shapes, path point editing, pressure-sensitive brush, eraser, text,
-  image import.
+  image import, and tracing an image into editable flat-colour vector shapes.
 - **Camera and depth**: every layer has a depth; the animatable camera pans, zooms, rolls and
   dollies with real parallax and optional depth-of-field blur.
 - **Effects and particles**: blur, glow, drop shadow, colour adjustment, tint; rain, snow, fire,
   smoke, sparks, confetti and more.
 - **Multiple scenes** with cuts, fades, dissolves, wipes and slides.
-- **Export**: MP4 and WebM video with sound, plus character files (`.dfrig`) for reuse.
+- **Export**: MP4 and WebM video with sound, animated GIF, PNG sequence, sprite sheet, plus
+  character files (`.dfrig`) for reuse.
 
 ## Running it
 

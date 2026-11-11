@@ -25,7 +25,7 @@ Done when: `npm run check` passes, and the pure parts (file naming, sheet layout
 shape) have unit tests. Canvas encoding cannot run in the node test environment, so keep layout
 and naming in pure helper functions and test those.
 
-### C2  Image tracer — ready
+### C2  Image tracer — done by Claude (2026-11-11), do not start
 Owns: `src/core/trace.ts`, `src/core/trace.test.ts`.
 `traceImage(image: { data: Uint8ClampedArray; width: number; height: number }, opts?: {
 colors?: number; minArea?: number; tolerance?: number; smooth?: boolean }) =>
@@ -37,7 +37,7 @@ when `smooth` is true (default) fit bezier handles so curves stay curves. Pure: 
 Done when: tests cover a solid square, a square with a hole, two touching colour regions, a
 transparent background, and `minArea` dropping specks; `npm run check` passes.
 
-### C3  Lip-sync analysis and waveform peaks — ready
+### C3  Lip-sync analysis and waveform peaks — done by Claude (2026-11-11), do not start
 Owns: `src/audio/lipsync.ts`, `src/audio/waveform.ts`, and their tests.
 - `analyzeVisemes(samples: Float32Array, sampleRate: number, fps: number, opts?: {
   sensitivity?: number; minHold?: number }) => { frame: number; viseme: Viseme }[]` returning one
@@ -71,12 +71,11 @@ Bugs and design risks only.
   `spriteSheet.ts` with `import.meta.glob`. As soon as a file exists with the export named in the
   task (`exportGif`, `exportPngSequence`, `exportSpriteSheet`), its format appears in the Export
   dialog. You do not need to touch the dialog.
-- C3: `src/audio/lipsyncApply.ts` looks for `src/audio/lipsync.ts` the same way and calls
-  `analyzeVisemes(samples, sampleRate, fps, { sensitivity })`. Once it exists, a Lip-sync button
-  appears for the selected audio clip. `src/audio/engine.ts` currently computes waveform peaks
-  inline; I will switch it to your `computePeaks` when C3 merges.
-- C2: I will wire `traceImage` into Character Creator ("Convert my image" gets a faithful trace
-  mode) and an Edit > Trace image command after it merges.
+- C3 is built in: `src/audio/lipsyncApply.ts` imports `analyzeVisemes` directly and the timeline
+  shows Sensitivity, Hold and Apply for the selected audio clip. `src/audio/engine.ts` uses
+  `computePeaks`.
+- C2 is built in: `traceImage` is used by `src/ui/TraceDialog.tsx` (Edit > Trace image to vector
+  shapes, and the Image section of the properties panel).
 
 ## Claude (in progress, do not touch these areas)
 

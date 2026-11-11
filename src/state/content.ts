@@ -7,11 +7,13 @@ import { builtinActions } from '../core/character/actions';
 import { buildCharacter } from '../core/character/build';
 import { humanoidSpec, type HumanoidParams } from '../core/character/humanoid';
 import type { CharacterSpec } from '../core/character/spec';
-import { createGroup, createImage, createParticles } from '../core/factory';
+import { createGroup, createImage, createParticles, createShape } from '../core/factory';
 import { newId } from '../core/ids';
 import { apply, IDENTITY, invert } from '../core/math';
 import { PARTICLE_PRESETS } from '../core/particles';
+import { transformPath } from '../core/path';
 import { autoWeights, computeBind, gridMesh, type BoneSegment } from '../core/skin';
+import type { TracedShape } from '../core/trace';
 import { ancestorOfType, extractSubtree, insertBundle, subtreeIds, topLevel, type RigFile } from '../core/tree';
 import type { ActionClip, Asset, ID, ImageNode, Keyframe, ShapeNode, Track } from '../core/types';
 import { imageSize } from '../render/images';
@@ -132,6 +134,49 @@ export function placeImage(asset: Asset, at?: { x: number; y: number }): ID {
   addNode(node, null, undefined, 'Place image');
   ui().select([node.id]);
   return node.id;
+}
+
+/** Decodes an image asset to pixels, scaled down so its longer side is at most `maxSide`. */
+export async function imagePixels(asset: Asset, maxSide = 900): Promise<ImageData> {
+  const img = new Image();
+  img.src = asset.dataUrl;
+  await img.decode();
+  const k = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(img.naturalWidth * k));
+  canvas.height = Math.max(1, Math.round(img.naturalHeight * k));
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return ctx.getImageData(0, 0, canvas.width, canvas.height);
+}
+
+/**
+ * Replaces an image layer with the vector shapes traced from it: a group in the same place, one
+ * shape per colour, back to front. The image is hidden, not deleted, so the trace can be redone.
+ * `traced` is the pixel size the shapes were traced at.
+ */
+export function addTracedShapes(imageId: ID, shapes: TracedShape[], traced: { width: number; height: number }): ID | null {
+  const n = scene().nodes[imageId] as ImageNode | undefined;
+  if (!n || n.type !== 'image' || !shapes.length) return null;
+  const sx = n.width / traced.width;
+  const sy = n.height / traced.height;
+  const group = createGroup(`${n.name} (vector)`, {
+    x: n.x, y: n.y, rotation: n.rotation, scaleX: n.scaleX, scaleY: n.scaleY, opacity: n.opacity,
+    depth: n.depth, zOrder: n.zOrder, blend: n.blend, view: n.view, tag: n.tag,
+  });
+  const parts = shapes.map((shape, i) => {
+    // Image pixels run from the top-left corner; a layer's own space is centred on the image.
+    const path = transformPath(shape.path, [sx, 0, 0, sy, -n.width / 2, -n.height / 2]);
+    const part = createShape(`Colour ${i + 1}`, path, { fill: shape.color }, { fillRule: 'evenodd', parent: group.id });
+    group.children.push(part.id);
+    return part;
+  });
+  doc.transact('Trace image', () => {
+    addNodes([group, ...parts], [group.id], n.parent, 'Trace image');
+    patchNode(imageId, { visible: false }, 'Trace image');
+  });
+  ui().select([group.id]);
+  return group.id;
 }
 
 export function addParticlePreset(preset: string): ID {

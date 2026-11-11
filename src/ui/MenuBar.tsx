@@ -102,6 +102,7 @@ export function MenuBar() {
             <MenuItem label="Send backward" kbd="[" disabled={selection.length !== 1} onClick={() => { close(); reorder(selection[0], 'down'); }} />
             <MenuItem label="Send to back" kbd="Shift+[" disabled={selection.length !== 1} onClick={() => { close(); reorder(selection[0], 'bottom'); }} />
             <div className="menu-sep" />
+            <MenuItem label="Trace image to vector shapes…" disabled={selection.length !== 1 || scene().nodes[selection[0]]?.type !== 'image'} onClick={() => { close(); set({ dialog: 'trace' }); }} />
             <MenuItem label="Insert keyframe" kbd="K" disabled={!has} onClick={() => { close(); keyNodes(selection); }} />
           </>
         )}

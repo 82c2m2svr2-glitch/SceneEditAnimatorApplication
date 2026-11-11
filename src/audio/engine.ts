@@ -5,6 +5,7 @@ import { readAsDataUrl } from '../state/content';
 import { onPlaybackStart, onPlaybackStop } from '../state/playback';
 import { doc } from '../state/store';
 import { requestRepaint, ui } from '../state/ui';
+import { computePeaks } from './waveform';
 
 let ctx: AudioContext | null = null;
 
@@ -61,21 +62,7 @@ export function getPeaks(assetId: ID, buckets = 2000): Float32Array | null {
     void decodeAsset(asset);
     return null;
   }
-  const mono = monoOf(buf);
-  const out = new Float32Array(buckets * 2);
-  const per = mono.length / buckets;
-  for (let b = 0; b < buckets; b++) {
-    let lo = 0;
-    let hi = 0;
-    const end = Math.min(mono.length, Math.floor((b + 1) * per));
-    for (let i = Math.floor(b * per); i < end; i++) {
-      const v = mono[i];
-      if (v < lo) lo = v;
-      if (v > hi) hi = v;
-    }
-    out[b * 2] = lo;
-    out[b * 2 + 1] = hi;
-  }
+  const out = computePeaks(monoOf(buf), buckets);
   peaksCache.set(assetId, out);
   return out;
 }

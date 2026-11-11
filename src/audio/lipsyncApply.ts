@@ -1,30 +1,31 @@
-import type { Viseme } from '../core/character/spec';
 import type { Ease, ID } from '../core/types';
 import { deleteKeys, scene, setKeys } from '../state/commands';
 import { doc } from '../state/store';
 import { getSamples } from './engine';
+import { analyzeVisemes } from './lipsync';
 
-// The audio analyser is a separate module (src/audio/lipsync.ts); the feature is offered once it exists.
-const optional = import.meta.glob('./lipsync.ts') as Record<string, () => Promise<any>>;
-
-export const lipSyncAvailable = './lipsync.ts' in optional;
+export interface LipSyncSettings {
+  /** How readily the mouth opens: 1 is normal, higher reacts to quieter sound. */
+  sensitivity: number;
+  /** Shortest time a mouth shape is held, in frames. Higher is calmer, lower is snappier. */
+  minHold: number;
+}
 
 /**
  * Analyses an audio clip and keys the character's mouth to it. The result is ordinary step
  * keyframes on the character's "mouth" track, so every shape can be moved, changed or deleted on
  * the timeline afterwards.
  */
-export async function applyLipSync(clipId: ID, characterId: ID, sensitivity = 1): Promise<number> {
+export async function applyLipSync(clipId: ID, characterId: ID, settings: LipSyncSettings = { sensitivity: 1, minHold: 2 }): Promise<number> {
   const p = doc.project!;
   const s = scene(p);
   const clip = s.audio.find((a) => a.id === clipId);
   if (!clip) throw new Error('That audio clip no longer exists.');
   const audio = await getSamples(clip.assetId);
   if (!audio) throw new Error('The audio could not be decoded.');
-  const { analyzeVisemes } = await optional['./lipsync.ts']();
   const from = Math.floor(clip.offset * audio.sampleRate);
   const to = Math.min(audio.samples.length, Math.floor((clip.offset + clip.length) * audio.sampleRate));
-  const shapes: { frame: number; viseme: Viseme }[] = analyzeVisemes(audio.samples.subarray(from, to), audio.sampleRate, p.fps, { sensitivity });
+  const shapes = analyzeVisemes(audio.samples.subarray(from, to), audio.sampleRate, p.fps, settings);
   const start = Math.round(clip.start);
   const end = Math.round(clip.start + clip.length * p.fps);
   doc.transact('Lip-sync to audio', () => {

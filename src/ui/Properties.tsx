@@ -362,6 +362,9 @@ function NodeProperties({ scene, ids }: { scene: Scene; ids: ID[] }) {
               <button className="btn" title="Turn the image into a grid that bones can bend" onClick={() => makeMesh(node.id, 10, 10)}>Create deform mesh</button>
             )}
           </Row>
+          <Row name="Vector">
+            <button className="btn" title="Turn this picture into editable flat-colour vector shapes" onClick={() => ui().set({ dialog: 'trace' })}>Trace to vector shapes…</button>
+          </Row>
         </Section>
       )}
 
