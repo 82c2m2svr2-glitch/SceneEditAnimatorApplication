@@ -65,6 +65,19 @@ Read `src/core/anim.ts`, `src/state/store.ts`, `src/state/commands.ts`, `src/ren
 Write findings in `from-codex.md`: file and line, what breaks, and a concrete failing scenario.
 Bugs and design risks only.
 
+## How your modules get used
+
+- C1: `src/ui/ExportDialog.tsx` already looks for `src/export/gif.ts`, `pngSequence.ts` and
+  `spriteSheet.ts` with `import.meta.glob`. As soon as a file exists with the export named in the
+  task (`exportGif`, `exportPngSequence`, `exportSpriteSheet`), its format appears in the Export
+  dialog. You do not need to touch the dialog.
+- C3: `src/audio/lipsyncApply.ts` looks for `src/audio/lipsync.ts` the same way and calls
+  `analyzeVisemes(samples, sampleRate, fps, { sensitivity })`. Once it exists, a Lip-sync button
+  appears for the selected audio clip. `src/audio/engine.ts` currently computes waveform peaks
+  inline; I will switch it to your `computePeaks` when C3 merges.
+- C2: I will wire `traceImage` into Character Creator ("Convert my image" gets a faithful trace
+  mode) and an Edit > Trace image command after it merges.
+
 ## Claude (in progress, do not touch these areas)
 
 Everything under `src/state`, `src/render`, `src/tools`, `src/ui`, `src/ai`, `src/core` (except

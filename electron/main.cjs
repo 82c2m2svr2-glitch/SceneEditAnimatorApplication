@@ -69,6 +69,8 @@ async function readSecrets() {
   }
 }
 
+ipcMain.handle('dreamforge:secrets-available', () => safeStorage.isEncryptionAvailable());
+
 ipcMain.handle('dreamforge:get-secret', async (_event, name) => {
   if (!SECRET_NAMES.has(name) || !safeStorage.isEncryptionAvailable()) return null;
   const all = await readSecrets();
@@ -81,8 +83,7 @@ ipcMain.handle('dreamforge:get-secret', async (_event, name) => {
 });
 
 ipcMain.handle('dreamforge:set-secret', async (_event, name, value) => {
-  if (!SECRET_NAMES.has(name) || typeof value !== 'string') return;
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('This system has no secure credential storage available.');
+  if (!SECRET_NAMES.has(name) || typeof value !== 'string' || !safeStorage.isEncryptionAvailable()) return;
   const all = await readSecrets();
   if (value) all[name] = safeStorage.encryptString(value).toString('base64');
   else delete all[name];

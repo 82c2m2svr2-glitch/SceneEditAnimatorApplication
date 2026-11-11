@@ -23,6 +23,10 @@ const DEFAULTS: Settings = {
 };
 
 const STORAGE = 'dreamforge.settings';
+/** True once the desktop app has confirmed the OS credential store works. */
+let secureStore = false;
+
+export const usingSecureStore = (): boolean => secureStore;
 const SECRET_FIELDS = ['openaiKey', 'anthropicKey'] as const;
 
 function load(): Settings {
@@ -40,7 +44,7 @@ export const useSettings = create<Settings & { update: (patch: Partial<Settings>
     const { update: _u, ...all } = get();
     const native = window.dreamforge;
     const stored: Record<string, unknown> = { ...all };
-    if (native) {
+    if (native && secureStore) {
       // On desktop, keys go to the operating system's credential store, not to plain storage.
       for (const f of SECRET_FIELDS) {
         if (f in patch) void native.setSecret(f, all[f]);
@@ -59,10 +63,14 @@ export const settings = (): Settings => useSettings.getState();
 export async function loadNativeSecrets(): Promise<void> {
   const native = window.dreamforge;
   if (!native) return;
+  secureStore = await native.secretsAvailable().catch(() => false);
+  if (!secureStore) return;
   const patch: Partial<Settings> = {};
   for (const f of SECRET_FIELDS) {
     const v = await native.getSecret(f);
     if (v) patch[f] = v;
   }
   if (Object.keys(patch).length) useSettings.setState(patch);
+  // Move any keys saved before the credential store was available out of plain storage.
+  useSettings.getState().update({});
 }

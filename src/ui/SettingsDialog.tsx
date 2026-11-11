@@ -1,7 +1,7 @@
 import { Loader2, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { listAnthropicModels, listOpenAIModels } from '../ai/providers';
-import { useSettings, type ProviderId } from '../state/settings';
+import { useSettings, usingSecureStore, type ProviderId } from '../state/settings';
 import { useUI } from '../state/ui';
 import { Dialog } from './widgets';
 
@@ -50,7 +50,7 @@ export function SettingsDialog() {
   return (
     <Dialog title="Settings" onClose={() => set({ dialog: null })} footer={<><span className="spacer" /><button className="btn primary" onClick={() => set({ dialog: null })}>Done</button></>}>
       <div className="note">
-        Keys are stored only on this computer{window.dreamforge ? ', in the operating system credential store,' : ' (in this browser\'s local storage)'} and are sent only to the service they belong to. Usage is billed to your own account with that service.
+        Keys are stored only on this computer{usingSecureStore() ? ', in the operating system credential store,' : ' (in this app\'s local storage)'} and are sent only to the service they belong to. Usage is billed to your own account with that service.
       </div>
 
       <b>OpenAI (ChatGPT)</b>

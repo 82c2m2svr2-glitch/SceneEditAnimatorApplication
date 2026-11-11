@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { getEval } from './core/anim';
 import { renderFrame } from './render/draw';
-import { saveToLibrary } from './state/persistence';
+import { importAudio } from './audio/engine';
+import { importImage, importRig, placeImage, readAsDataUrl } from './state/content';
+import { openProjectFile, saveToLibrary } from './state/persistence';
 import { doc } from './state/store';
-import { useUI } from './state/ui';
+import { ui, useUI } from './state/ui';
 import { loadNativeSecrets } from './state/settings';
 import { CharacterCreator } from './ui/CharacterCreator';
 import { ChatPanel } from './ui/ChatPanel';
@@ -39,6 +41,22 @@ function thumbnail(): string | undefined {
   }
 }
 
+/** Files dropped onto the window: images and audio are imported, projects and characters opened. */
+async function handleDrop(files: File[]): Promise<void> {
+  for (const f of files) {
+    const name = f.name.toLowerCase();
+    try {
+      if (name.endsWith('.dreamforge')) await openProjectFile(f);
+      else if (name.endsWith('.dfrig')) importRig(JSON.parse(await f.text()));
+      else if (f.type.startsWith('image/')) placeImage(await importImage(f.name, await readAsDataUrl(f), f.type));
+      else if (f.type.startsWith('audio/')) await importAudio(f);
+      else ui().toast(`"${f.name}" is not a file DreamForge can import.`, 'error');
+    } catch (err) {
+      ui().toast(err instanceof Error ? err.message : `Could not import "${f.name}".`, 'error');
+    }
+  }
+}
+
 function Editor() {
   const rightTab = useUI((s) => s.rightTab);
   const bottomPanel = useUI((s) => s.bottomPanel);
@@ -68,7 +86,15 @@ function Editor() {
   return (
     <>
       <MenuBar />
-      <div className="editor">
+      <div
+        className="editor"
+        onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
+        onDrop={(e) => {
+          if (!e.dataTransfer.files.length) return;
+          e.preventDefault();
+          void handleDrop([...e.dataTransfer.files]);
+        }}
+      >
         <Toolbar />
         <LeftPanel />
         <div className="center">

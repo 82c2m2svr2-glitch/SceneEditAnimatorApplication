@@ -144,6 +144,8 @@ export async function openProjectFile(file?: File): Promise<boolean> {
 export interface NativeBridge {
   isDesktop: true;
   saveFile(opts: { defaultPath: string; data: string | ArrayBuffer; filters?: { name: string; extensions: string[] }[] }): Promise<string | null>;
+  /** False when the operating system has no credential store (some Linux setups). */
+  secretsAvailable(): Promise<boolean>;
   getSecret(name: string): Promise<string | null>;
   setSecret(name: string, value: string): Promise<void>;
 }

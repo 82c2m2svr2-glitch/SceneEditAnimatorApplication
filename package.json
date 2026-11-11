@@ -16,7 +16,8 @@
     "check": "npm run typecheck && npm run lint && npm run test",
     "desktop": "vite build && electron .",
     "desktop:dev": "electron . --dev",
-    "dist": "vite build && electron-builder"
+    "dist": "vite build && electron-builder",
+    "e2e": "node e2e/run.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
