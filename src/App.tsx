@@ -4,11 +4,15 @@ import { renderFrame } from './render/draw';
 import { saveToLibrary } from './state/persistence';
 import { doc } from './state/store';
 import { useUI } from './state/ui';
+import { loadNativeSecrets } from './state/settings';
+import { CharacterCreator } from './ui/CharacterCreator';
+import { ChatPanel } from './ui/ChatPanel';
 import { LeftPanel } from './ui/LeftPanel';
 import { MenuBar } from './ui/MenuBar';
 import { ActionsPanel, AssetsPanel, HistoryPanel } from './ui/Panels';
 import { Properties } from './ui/Properties';
 import { handleKey, SHORTCUT_HELP } from './ui/shortcuts';
+import { SettingsDialog } from './ui/SettingsDialog';
 import { StartMenu } from './ui/StartMenu';
 import { Timeline } from './ui/Timeline';
 import { Toolbar } from './ui/Toolbar';
@@ -37,6 +41,7 @@ function Editor() {
   const rightTab = useUI((s) => s.rightTab);
   const bottomPanel = useUI((s) => s.bottomPanel);
   const set = useUI((s) => s.set);
+  const showChat = useUI((s) => s.showChat);
   const [bottomH, setBottomH] = useState(250);
   const drag = useRef<{ y: number; h: number } | null>(null);
 
@@ -95,6 +100,7 @@ function Editor() {
           />
           {bottomPanel === 'timeline' && <Timeline />}
         </div>
+        {showChat && <ChatPanel />}
       </div>
     </>
   );
@@ -118,9 +124,14 @@ export function App() {
   const screen = useUI((s) => s.screen);
   const dialog = useUI((s) => s.dialog);
   const set = useUI((s) => s.set);
+  useEffect(() => {
+    void loadNativeSecrets();
+  }, []);
   return (
     <div className="app">
       {screen === 'editor' && doc.project ? <Editor /> : <StartMenu />}
+      {dialog === 'characterCreator' && doc.project && <CharacterCreator />}
+      {dialog === 'settings' && <SettingsDialog />}
       {dialog === 'shortcuts' && (
         <Dialog title="Keyboard shortcuts" onClose={() => set({ dialog: null })}>
           <div className="kbd-list">
