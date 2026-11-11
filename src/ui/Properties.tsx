@@ -1,6 +1,8 @@
-import { FlipHorizontal2, Link2, Plus, Trash2 } from 'lucide-react';
+import { FlipHorizontal2, Link2, MessageSquareText, Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { CAMERA_ANIM_PROPS, sampleTrack } from '../core/anim';
 import { VISEMES } from '../core/character/spec';
+import { textToVisemes } from '../core/character/speech';
 import { exposureAt, exposureFrames } from '../core/drawing';
 import { PARTICLE_PRESETS } from '../core/particles';
 import {
@@ -9,7 +11,7 @@ import {
 } from '../core/types';
 import {
   currentValue, deleteKeys, isAnimatable, patchConstraint, patchNode, patchProject, patchScene, removeConstraint,
-  scene as currentScene, setCamera, setDrawingFrame, setKey, setProps, setPropsMany,
+  scene as currentScene, setCamera, setDrawingFrame, setKey, setKeys, setProps, setPropsMany,
 } from '../state/commands';
 import { addIKForBone, bindSkin, makeMesh, unbindSkin } from '../state/content';
 import { doc, useDocRevision } from '../state/store';
@@ -232,6 +234,34 @@ function IKSection({ scene, node }: { scene: Scene; node: SceneNode }) {
   );
 }
 
+/** Lip-syncs a typed line of dialogue at the playhead (no audio needed). */
+function SpeakRow({ id }: { id: ID }) {
+  const [text, setText] = useState('');
+  const speak = () => {
+    const line = text.trim();
+    if (!line) return;
+    const p = doc.project!;
+    const shapes = textToVisemes(line, p.fps, ui().frame);
+    const end = shapes[shapes.length - 1].frame;
+    doc.transact('Lip-sync text', () => {
+      setKeys(shapes.map((v) => ({ target: id, prop: 'mouth', f: v.frame, v: v.viseme, e: 'step' as const })), 'Lip-sync text');
+      if (end >= currentScene().duration) patchScene({ duration: end + 12 }, 'Extend scene');
+    });
+    ui().toast(`Mouth keyed from frame ${shapes[0].frame} to ${end}. Fine-tune the shapes on the "mouth" track.`, 'success');
+    setText('');
+  };
+  return (
+    <div className="row">
+      <input
+        type="text" style={{ flex: 1 }} placeholder="Type a line to lip-sync at the playhead" value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') speak(); }}
+      />
+      <button className="icon-btn" title="Key the mouth shapes for this line" disabled={!text.trim()} onClick={speak}><MessageSquareText size={14} /></button>
+    </div>
+  );
+}
+
 function NodeProperties({ scene, ids }: { scene: Scene; ids: ID[] }) {
   const setup = useUI((u) => u.setupMode);
   const frame = useUI((u) => u.frame);
@@ -342,6 +372,7 @@ function NodeProperties({ scene, ids }: { scene: Scene; ids: ID[] }) {
           </Row>
           <Row name="Mouth"><StepSelect id={node.id} prop="mouth" options={VISEMES.map((v) => ({ value: v, label: v }))} /></Row>
           <Row name="Eyes"><StepSelect id={node.id} prop="eyes" options={['open', 'closed', 'happy'].map((v) => ({ value: v, label: v }))} /></Row>
+          <SpeakRow id={node.id} />
           <div className="hint">View, mouth and eyes can be keyed to turn the character, blink or lip-sync during a shot. Actions are in the Actions tab.</div>
         </Section>
       )}
