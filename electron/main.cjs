@@ -18,6 +18,7 @@ function createWindow() {
     minHeight: 700,
     backgroundColor: '#0c0d11',
     title: 'DreamForge',
+    icon: path.join(__dirname, '..', 'build', 'icon.png'),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

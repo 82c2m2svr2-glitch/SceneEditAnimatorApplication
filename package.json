@@ -17,7 +17,8 @@
     "desktop": "vite build && electron .",
     "desktop:dev": "electron . --dev",
     "dist": "vite build && electron-builder",
-    "e2e": "node e2e/run.cjs"
+    "e2e": "node e2e/run.cjs",
+    "dist:win": "vite build && electron-builder --win portable --x64"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
@@ -55,6 +56,7 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
+      "build/icon.png",
       "package.json"
     ],
     "fileAssociations": [
@@ -69,11 +71,14 @@
       "target": "dmg"
     },
     "win": {
-      "target": "nsis"
+      "target": "portable"
     },
     "linux": {
       "target": "AppImage",
       "category": "Graphics"
+    },
+    "portable": {
+      "artifactName": "DreamForge-${version}-windows.exe"
     }
   }
 }

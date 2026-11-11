@@ -39,6 +39,7 @@ npm run dev          # browser version at http://localhost:5173
 npm run build        # production web build in dist/
 npm run desktop      # build, then open the desktop app
 npm run dist         # package installers into release/
+npm run dist:win     # single portable Windows .exe in release/
 npm run check        # typecheck + lint + unit tests
 npm run e2e          # browser scenarios (needs `npm run dev` running; see e2e/run.cjs)
 ```
