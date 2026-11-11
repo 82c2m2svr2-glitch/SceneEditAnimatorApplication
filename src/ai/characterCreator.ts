@@ -216,15 +216,14 @@ export function viewFromResponse(raw: any, view: ViewName): ViewSpec {
   return { joints, parts, face };
 }
 
-async function vectorize(image: string, view: ViewName, signal?: AbortSignal): Promise<ViewSpec> {
-  const norm = await normalizeImage(image, 1536);
+async function vectorizeOnce(image: { url: string; width: number; height: number }, view: ViewName, signal?: AbortSignal): Promise<ViewSpec> {
   const data = await post(
     'chat/completions',
     JSON.stringify({
       model: settings().visionModel,
       messages: [
-        { role: 'system', content: vectorPrompt(view, norm.width, norm.height) },
-        { role: 'user', content: [{ type: 'text', text: 'Convert this drawing.' }, { type: 'image_url', image_url: { url: norm.url, detail: 'high' } }] },
+        { role: 'system', content: vectorPrompt(view, image.width, image.height) },
+        { role: 'user', content: [{ type: 'text', text: 'Convert this drawing.' }, { type: 'image_url', image_url: { url: image.url, detail: 'high' } }] },
       ],
       response_format: { type: 'json_schema', json_schema: { name: 'character_view', strict: true, schema: VIEW_SCHEMA } },
     }),
@@ -238,9 +237,26 @@ async function vectorize(image: string, view: ViewName, signal?: AbortSignal): P
   try {
     parsed = JSON.parse(choice?.message?.content ?? '');
   } catch {
-    throw new AssistantError(`The conversion for the ${view} view came back unreadable. Try again.`);
+    throw new RetryableError(`The conversion for the ${view} view came back unreadable. Try again.`);
   }
-  return viewFromResponse(parsed, view);
+  try {
+    return viewFromResponse(parsed, view);
+  } catch (err) {
+    throw new RetryableError((err as Error).message);
+  }
+}
+
+/** A malformed model answer: worth one more attempt before reporting the view as failed. */
+class RetryableError extends AssistantError {}
+
+async function vectorize(image: string, view: ViewName, signal?: AbortSignal): Promise<ViewSpec> {
+  const norm = await normalizeImage(image, 1536);
+  try {
+    return await vectorizeOnce(norm, view, signal);
+  } catch (err) {
+    if (!(err instanceof RetryableError)) throw err;
+    return vectorizeOnce(norm, view, signal);
+  }
 }
 
 /**

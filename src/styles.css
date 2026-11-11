@@ -135,6 +135,7 @@ input[type='checkbox'] { accent-color: var(--accent); margin: 0; }
 .row { display: flex; align-items: center; gap: 6px; min-height: 24px; }
 .row > .name { width: 74px; color: var(--dim); flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row > .grow { flex: 1; min-width: 0; display: flex; gap: 6px; align-items: center; }
+.row > .grow > .field { flex: 1; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; flex: 1; min-width: 0; }
 .hint { color: var(--faint); font-size: 11px; line-height: 1.45; }
 .empty { padding: 18px 12px; color: var(--faint); text-align: center; line-height: 1.5; }

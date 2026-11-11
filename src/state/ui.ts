@@ -93,7 +93,7 @@ export const useUI = create<UIState>((set, get) => ({
   snap: false,
   onion: { enabled: false, before: 2, after: 1 },
   fill: '#7c5cff',
-  stroke: '#14151a',
+  stroke: '#ffffff',
   strokeWidth: 0,
   brushColor: '#14151a',
   brushSize: 10,
