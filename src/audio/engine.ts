@@ -166,25 +166,25 @@ export async function preloadAudio(p: Project, scenes: Scene[]): Promise<void> {
 }
 
 /**
- * Renders the soundtrack for a sequence of scene ranges into one buffer.
- * `ranges` are consecutive: each plays `frames` frames of its scene starting at `from`.
+ * Renders the soundtrack for a set of scene ranges into one buffer. Each range plays `frames`
+ * frames of its scene starting at scene frame `from`, placed at output frame `at`. Ranges may
+ * overlap (scene transitions), in which case their audio mixes.
  */
-export async function mixdown(p: Project, ranges: { scene: Scene; from: number; frames: number }[], sampleRate = 48000): Promise<AudioBuffer | null> {
+export async function mixdown(p: Project, ranges: { scene: Scene; from: number; frames: number; at: number }[], sampleRate = 48000): Promise<AudioBuffer | null> {
   if (!ranges.some((r) => r.scene.audio.some((a) => !a.muted))) return null;
   await preloadAudio(p, ranges.map((r) => r.scene));
-  const total = ranges.reduce((a, r) => a + r.frames, 0) / p.fps;
+  const total = Math.max(...ranges.map((r) => r.at + r.frames)) / p.fps;
   const oc = new OfflineAudioContext(2, Math.max(1, Math.ceil(total * sampleRate)), sampleRate);
-  let t = 0;
   for (const r of ranges) {
+    const t = r.at / p.fps;
     const end = t + r.frames / p.fps;
-    // A gate per range so audio from one scene cannot spill into the next.
+    // A gate per range so audio from one scene cannot spill past its end.
     const gate = oc.createGain();
     gate.gain.setValueAtTime(0, 0);
     gate.gain.setValueAtTime(1, t);
     gate.gain.setValueAtTime(0, end);
     gate.connect(oc.destination);
     schedule(oc, p, r.scene, r.from, t, gate);
-    t = end;
   }
   return oc.startRendering();
 }

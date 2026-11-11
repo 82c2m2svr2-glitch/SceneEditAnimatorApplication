@@ -7,6 +7,8 @@ import { useUI } from './state/ui';
 import { loadNativeSecrets } from './state/settings';
 import { CharacterCreator } from './ui/CharacterCreator';
 import { ChatPanel } from './ui/ChatPanel';
+import { ExportDialog } from './ui/ExportDialog';
+import { GraphEditor } from './ui/GraphEditor';
 import { LeftPanel } from './ui/LeftPanel';
 import { MenuBar } from './ui/MenuBar';
 import { ActionsPanel, AssetsPanel, HistoryPanel } from './ui/Panels';
@@ -98,7 +100,11 @@ function Editor() {
             onPointerMove={(e) => drag.current && setBottomH(Math.max(120, Math.min(window.innerHeight - 240, drag.current.h + drag.current.y - e.clientY)))}
             onPointerUp={() => (drag.current = null)}
           />
-          {bottomPanel === 'timeline' && <Timeline />}
+          <div className="tabs" style={{ flex: 'none' }}>
+            <button className={`tab${bottomPanel === 'timeline' ? ' on' : ''}`} style={{ flex: 'none', padding: '0 14px', height: 24 }} onClick={() => set({ bottomPanel: 'timeline' })}>Timeline</button>
+            <button className={`tab${bottomPanel === 'graph' ? ' on' : ''}`} style={{ flex: 'none', padding: '0 14px', height: 24 }} onClick={() => set({ bottomPanel: 'graph' })}>Graph editor</button>
+          </div>
+          {bottomPanel === 'timeline' ? <Timeline /> : <GraphEditor />}
         </div>
         {showChat && <ChatPanel />}
       </div>
@@ -132,6 +138,7 @@ export function App() {
       {screen === 'editor' && doc.project ? <Editor /> : <StartMenu />}
       {dialog === 'characterCreator' && doc.project && <CharacterCreator />}
       {dialog === 'settings' && <SettingsDialog />}
+      {dialog === 'export' && doc.project && <ExportDialog />}
       {dialog === 'shortcuts' && (
         <Dialog title="Keyboard shortcuts" onClose={() => set({ dialog: null })}>
           <div className="kbd-list">
