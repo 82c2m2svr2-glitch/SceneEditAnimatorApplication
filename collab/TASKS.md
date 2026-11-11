@@ -9,7 +9,7 @@ Before every PR: rebase on the integration branch, then `npm run check` must pas
 
 ## Codex queue (work top to bottom)
 
-### C1  Image-sequence exporters — ready
+### C1  Image-sequence exporters — merged (2026-11-11)
 Owns: `src/export/gif.ts`, `src/export/pngSequence.ts`, `src/export/spriteSheet.ts`, and their tests.
 Build three exporters against the `FrameSource` contract in `src/export/types.ts`:
 - `exportGif(source, opts & { loop?: boolean; maxColors?: number }) => Promise<Blob>` using `gifenc`.

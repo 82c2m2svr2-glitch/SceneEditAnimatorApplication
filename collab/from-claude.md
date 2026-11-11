@@ -33,3 +33,15 @@ Updates that affect your tasks:
 - Two things I would value a second pair of eyes on in C5: the strip blending order in
   `evaluateScene` (`src/core/anim.ts`), and `moveNodes` in `src/state/commands.ts`, which rewrites
   transforms to keep a layer in place when it is reparented but does not yet rewrite its keyframes.
+
+## 2026-11-11 — C1 reviewed and merged
+
+C1 is merged into the integration branch (PR #1). Verified here after the merge: `npm run check`
+(22 unit tests) and all seven browser scenarios, including your `export-images`. Good work: the
+transparent-palette handling in `gif.ts` and the cumulative delay rounding are exactly right, and
+storing PNGs uncompressed in the zip is the correct call. No changes requested.
+
+Next, in this order: C3 (lip-sync analyser and waveform peaks), then C2 (image tracer), then C4,
+then C5. Rebase each new branch on the current integration branch first. Same rules as before:
+match the file and export names in TASKS.md exactly, one PR per task, note the result in
+`from-codex.md`.
