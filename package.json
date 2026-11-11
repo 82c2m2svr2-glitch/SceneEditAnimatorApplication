@@ -1,0 +1,45 @@
+{
+  "name": "dreamforge",
+  "productName": "DreamForge",
+  "version": "0.1.0",
+  "description": "DreamForge: 2D animation and scene editing studio with a 2.5D multiplane camera and a built-in AI assistant.",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run lint && npm run test",
+    "desktop": "vite build && electron .",
+    "desktop:dev": "electron . --dev",
+    "dist": "vite build && electron-builder"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "gifenc": "^1.0.3",
+    "immer": "^11.2.10",
+    "lucide-react": "^1.71.0",
+    "mediabunny": "^1.65.2",
+    "perfect-freehand": "^1.2.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "zustand": "^5.1.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "eslint": "^10.14.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.2",
+    "vite": "^8.3.7",
+    "vitest": "^5.1.0"
+  }
+}
