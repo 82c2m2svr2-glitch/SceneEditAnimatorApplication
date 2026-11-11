@@ -1,0 +1,41 @@
+# Builds the portable Windows .exe on a Windows machine and publishes it as a GitHub Release.
+# Run it from the Actions tab ("Run workflow"), or push a tag such as v0.1.0.
+name: Windows build
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DreamForge-windows
+          path: release/*.exe
+          if-no-files-found: error
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="v$(node -p "require('./package.json').version")"
+          if gh release view "$version" > /dev/null 2>&1; then
+            gh release upload "$version" release/*.exe --clobber
+          else
+            gh release create "$version" release/*.exe --target "$GITHUB_SHA" --title "DreamForge $version" \
+              --notes "Portable Windows build. Download the .exe and double-click it; no install needed. Windows may warn that the file is unsigned: choose More info, then Run anyway."
+          fi
