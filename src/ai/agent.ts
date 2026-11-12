@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { settings } from '../state/settings';
 import { doc } from '../state/store';
+import { memoryPrompt, recordFeedback, type Rating } from './memory';
 import { AssistantError, anthropicSession, openaiSession, type Session, type ToolCall, type ToolResult } from './providers';
 import { getTool, isToolOutput, validate } from './registry';
 import { registerAllTools } from './tools';
@@ -18,10 +19,13 @@ interface ChatState {
   busy: boolean;
   /** Undo steps created by the assistant during the last request, for "Undo all". */
   lastTurnSteps: number;
+  /** What the user last asked for, and whether that result still awaits a rating. */
+  lastRequest: string;
+  awaitingFeedback: boolean;
   set: (patch: Partial<ChatState>) => void;
 }
 
-export const useChat = create<ChatState>((set) => ({ items: [], busy: false, lastTurnSteps: 0, set: (patch) => set(patch) }));
+export const useChat = create<ChatState>((set) => ({ items: [], busy: false, lastTurnSteps: 0, lastRequest: '', awaitingFeedback: false, set: (patch) => set(patch) }));
 
 let nextId = 1;
 let session: Session | null = null;
@@ -42,7 +46,25 @@ How the app works
 - Animation is keyframes on properties, with an ease from each key to the next. Use set_keyframes to write a whole motion at once.
 - Characters are rigged puppets with five views (front, threeQuarter, side, backThreeQuarter, back). Side-type views face screen-right by default; set facing "left" to mirror. Bone keyframes are OFFSETS from the rest pose, so 0 always means "rest". Rotation is clockwise-positive on screen: in a view facing right, a negative rotation swings a hanging arm or leg forward.
 - Prefer the action library (apply_action) for walking, running, idling, blinking, waving and jumping. Walk and run move the limbs in place, so also key the character's x to travel (about 4 to 6 pixels per frame for a walk at normal size, 10 to 14 for a run). Use side or threeQuarter view for walking across the screen.
-- speak lip-syncs a line of dialogue from its text.
+- speak lip-syncs a line of dialogue from its text; lip_sync_audio does it from a sound clip on the timeline.
+- Every built-in action plays correctly in all five views, so pick the view the shot needs and apply the action.
+- The skeleton has 27 bones, including chest, clavicle.L/R (shrugs), fingers and thumb (hands), toes, and hair. Use them: fingers and toes make a pose look alive.
+- 3D: add_character with style "3d" makes the same character as a 3D body that is drawn cel-shaded, so it still looks 2D. It is posed through the same bones; set_joint_3d additionally turns any joint in depth (for example head y to look left and right). add_3d_shape adds solids, and 3D model layers have rotX (tilt), rotY (turn) and rotZ (roll), all keyable.
+- generate_asset draws a background, prop, scenery piece, effect or texture with the user's OpenAI image key (it costs them money: use it when art is asked for or clearly needed, not for things simple shapes do well). trace_image turns a picture into vector shapes; image_to_3d puffs a cut-out picture into a 3D object.
+
+Directing an animation
+When the user asks for an animation, a scene or a shot, you are the director and the animator. Work in this order:
+1. Plan briefly in your head: the beats of the action, how long each takes, where the camera is, and which view each character is in.
+2. Stage it: background and props at sensible depths, characters placed where the action needs them.
+3. Block the main poses and movement first (actions, travel, turns), then add the detail: anticipation before a move, overlap and settle after it, blinks, head turns, hands and fingers, lip-sync, a camera move if it helps the shot.
+4. Review like an audience would: call look at four or more frames spread across the shot, including the middle of fast moves. Look for sliding feet, stiff or symmetrical poses, things popping, dead time, bad staging and clipping. Fix what you find and look again.
+5. Report in a few plain sentences what the shot is, then ask the user one specific question about how to improve it.
+Good animation has clear poses, varied timing (not everything on even beats), arcs instead of straight lines, weight (things ease in and out, heavy things move slower), and something always alive (a blink, a breath).
+
+Learning from the user
+- When the user rates your work or tells you what is wrong, take it seriously: study the result with look, say what you now see is weak, fix it, and check again.
+- After acting on feedback, call remember with one or two short lessons. A good lesson is general and reusable ("This user wants snappier timing: hold key poses longer and move between them in 4 to 6 frames"), not a description of this one scene. Also remember stated preferences (style, pacing, how characters should move) whenever the user tells you one.
+- Never claim you retrained or changed permanently. What you have is your saved lessons, which you are given at the start of every conversation.
 
 How to work
 - Call get_scene first so you know the stage size, frame rate and what exists. Refer to layers by the names it returns.
@@ -62,7 +84,9 @@ function ensureSession(): Session {
   const sig = `${provider}|${model}|${key}`;
   if (!session || sessionKey !== sig) {
     registerAllTools();
-    session = provider === 'openai' ? openaiSession(key, model, SYSTEM_PROMPT) : anthropicSession(key, model, SYSTEM_PROMPT);
+    // Lessons from earlier sessions travel with the instructions, so they apply from the first message.
+    const system = SYSTEM_PROMPT + memoryPrompt();
+    session = provider === 'openai' ? openaiSession(key, model, system) : anthropicSession(key, model, system);
     sessionKey = sig;
   }
   return session;
@@ -72,7 +96,7 @@ export function resetChat(): void {
   stopAssistant();
   session = null;
   sessionKey = '';
-  useChat.setState({ items: [], busy: false, lastTurnSteps: 0 });
+  useChat.setState({ items: [], busy: false, lastTurnSteps: 0, lastRequest: '', awaitingFeedback: false });
 }
 
 export function stopAssistant(): void {
@@ -115,12 +139,17 @@ async function runCall(call: ToolCall): Promise<ToolResult> {
   }
 }
 
-const MAX_STEPS = 60;
+// A full shot (stage, animate, review, polish) takes many tool calls.
+const MAX_STEPS = 200;
 
-/** Sends a user message and runs the assistant until it finishes its turn. */
-export async function sendToAssistant(text: string): Promise<void> {
+/**
+ * Sends a user message and runs the assistant until it finishes its turn. `shown` is what appears
+ * in the conversation when the message itself carries instructions the user did not type.
+ */
+export async function sendToAssistant(text: string, shown = text): Promise<void> {
   if (useChat.getState().busy) return;
-  push({ kind: 'user', id: nextId++, text });
+  push({ kind: 'user', id: nextId++, text: shown });
+  if (shown === text) useChat.setState({ lastRequest: text });
   let s: Session;
   try {
     s = ensureSession();
@@ -130,7 +159,7 @@ export async function sendToAssistant(text: string): Promise<void> {
   }
   abort = new AbortController();
   const undoBefore = doc.undoStack.length;
-  useChat.setState({ busy: true, lastTurnSteps: 0 });
+  useChat.setState({ busy: true, lastTurnSteps: 0, awaitingFeedback: false });
   s.addUser(text);
   try {
     for (let i = 0; i < MAX_STEPS; i++) {
@@ -199,6 +228,8 @@ export async function sendToAssistant(text: string): Promise<void> {
   } finally {
     useChat.setState({
       busy: false,
+      // Work that changed the project is worth a rating.
+      awaitingFeedback: doc.undoStack.length > undoBefore,
       lastTurnSteps: Math.max(0, doc.undoStack.length - undoBefore),
       items: useChat.getState().items.map((it) => (it.kind === 'assistant' && it.streaming ? { ...it, streaming: false } : it)),
     });
@@ -211,4 +242,54 @@ export function undoLastTurn(): void {
   const n = useChat.getState().lastTurnSteps;
   for (let i = 0; i < n; i++) doc.undo();
   useChat.setState({ lastTurnSteps: 0 });
+}
+
+/** What the assistant last said about its own work. */
+function lastReply(): string {
+  const items = useChat.getState().items;
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    if (it.kind === 'assistant' && it.text.trim()) return it.text;
+  }
+  return '';
+}
+
+const REVIEW = `Review it as a demanding animation director would:
+1. Call look at five or more frames spread across the shot, including the middle of every fast move.
+2. Say honestly, in two or three sentences, what is weak. Consider timing and spacing, anticipation and follow-through, arcs, weight, stiff or mirrored poses, sliding feet, staging, dead time, lip-sync and the camera.
+3. Fix those things with your tools.
+4. Look again to confirm the fixes read well.
+5. Call remember with one or two short, general lessons that will make your next animation better for this user.
+6. Finish by saying what you changed, then ask one specific question about what to improve next.`;
+
+/**
+ * Records the user's rating of the last result. A rating below "good" sends the assistant back to
+ * study its own work, repair it and save what it learned.
+ */
+export async function giveFeedback(rating: Rating, comment = ''): Promise<void> {
+  const chat = useChat.getState();
+  if (chat.busy) return;
+  recordFeedback(rating, comment, chat.lastRequest, lastReply());
+  useChat.setState({ awaitingFeedback: false });
+  const said = comment.trim();
+  if (rating === 'good') {
+    if (!said) {
+      push({ kind: 'note', id: nextId++, text: 'Rated good. Saved to memory.' });
+      return;
+    }
+    return sendToAssistant(
+      `The user rated your last result GOOD and said: "${said}". Do not change the scene. Call remember with one short, general lesson about what this user likes, then acknowledge in one sentence.`,
+      `Rated good: ${said}`,
+    );
+  }
+  const verdict = rating === 'meh' ? 'MEH: acceptable but not good enough' : 'BAD: it does not work';
+  return sendToAssistant(
+    `The user rated your last result ${verdict}.${said ? ` Their comment: "${said}".` : ' They gave no details, so finding the problems is your job.'}\n\n${REVIEW}`,
+    `Rated ${rating}${said ? `: ${said}` : ''}`,
+  );
+}
+
+/** Sends the assistant back over its last result without waiting for the user to complain. */
+export function polish(): Promise<void> {
+  return sendToAssistant(`Before the user rates it, improve your last result yourself.\n\n${REVIEW}`, 'Polish it: review your own work and improve it');
 }

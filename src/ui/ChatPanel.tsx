@@ -1,10 +1,36 @@
-import { Bot, Check, CircleAlert, Loader2, RotateCcw, Send, Square, Trash2, Undo2, Wrench, X } from 'lucide-react';
+import { Bot, Brain, Check, CircleAlert, Loader2, RotateCcw, Send, Sparkles, Square, ThumbsDown, ThumbsUp, Trash2, Undo2, Wrench, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { answerPlan, resetChat, sendToAssistant, stopAssistant, undoLastTurn, useChat } from '../ai/agent';
+import { answerPlan, giveFeedback, polish, resetChat, sendToAssistant, stopAssistant, undoLastTurn, useChat } from '../ai/agent';
+import { useMemory } from '../ai/memory';
 import { useSettings } from '../state/settings';
 import { useUI } from '../state/ui';
 
+/** Rating bar under a finished piece of work: the user's verdict drives the assistant's next move. */
+function Feedback() {
+  const [comment, setComment] = useState('');
+  const rate = (rating: 'good' | 'meh' | 'bad') => {
+    void giveFeedback(rating, comment);
+    setComment('');
+  };
+  return (
+    <div className="feedback">
+      <b>How is it?</b>
+      <input
+        type="text" value={comment} placeholder="Optional: what should be better?" onChange={(e) => setComment(e.target.value)}
+        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' && comment.trim()) rate('meh'); }}
+      />
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button className="btn" style={{ flex: 1 }} title="It is good. The assistant notes what you liked." onClick={() => rate('good')}><ThumbsUp size={13} /> Good</button>
+        <button className="btn" style={{ flex: 1 }} title="Not good enough. The assistant studies its own work, improves it and saves what it learned." onClick={() => rate('meh')}>Meh</button>
+        <button className="btn" style={{ flex: 1 }} title="It does not work. The assistant reviews it and redoes the weak parts." onClick={() => rate('bad')}><ThumbsDown size={13} /> Bad</button>
+      </div>
+      <button className="btn ghost" title="Send the assistant back over its own work without rating it" onClick={() => void polish()}><Sparkles size={13} /> Polish it (review and improve on its own)</button>
+    </div>
+  );
+}
+
 const SUGGESTIONS = [
+  'Direct a 6 second shot: a character walks in, notices the viewer, waves and smiles',
   'Build a park scene: sky, sun, hills, a tree and a path',
   'Make the character walk in from the left, stop in the middle and wave',
   'Add a slow camera push-in on the character over the whole scene',
@@ -15,6 +41,8 @@ export function ChatPanel() {
   const items = useChat((s) => s.items);
   const busy = useChat((s) => s.busy);
   const steps = useChat((s) => s.lastTurnSteps);
+  const awaiting = useChat((s) => s.awaitingFeedback);
+  const lessons = useMemory((s) => s.lessons.length);
   const provider = useSettings((s) => s.assistantProvider);
   const mode = useSettings((s) => s.aiMode);
   const update = useSettings((s) => s.update);
@@ -98,6 +126,7 @@ export function ChatPanel() {
           }
         })}
         {busy && <div className="hint"><Loader2 size={12} className="spin" style={{ verticalAlign: -2 }} /> Working…</div>}
+        {!busy && awaiting && <Feedback />}
         {!busy && steps > 0 && (
           <button className="btn" onClick={undoLastTurn} title="Reverts everything the assistant changed for your last message">
             <Undo2 size={13} /> Undo all {steps} change{steps > 1 ? 's' : ''} from this request
@@ -121,6 +150,7 @@ export function ChatPanel() {
           <span className="chip" title="Change the provider and model in Settings" style={{ cursor: 'pointer' }} onClick={() => set({ dialog: 'settings' })}>
             {provider === 'openai' ? 'ChatGPT' : 'Claude'} · {model}
           </span>
+          <button className="chip" style={{ cursor: 'pointer', border: 0 }} title="What the assistant has learned from your feedback" onClick={() => set({ dialog: 'memory' })}><Brain size={11} style={{ verticalAlign: -1 }} /> {lessons}</button>
           <span className="spacer" />
           {busy ? (
             <button className="btn" onClick={stopAssistant}><Square size={12} /> Stop</button>

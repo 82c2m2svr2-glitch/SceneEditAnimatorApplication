@@ -13,7 +13,19 @@ import {
   addNode, addScene, clearTrack, currentValue, deleteKeys, deleteNodes, duplicateNodes, isAnimatable, moveNodes, patchNode,
   patchScene, removeStrip, reorder, scene, setCamera, setFrame, setKeys, setProps,
 } from '../state/commands';
-import { addHumanoid, addIKForBone, addParticlePreset, applyAction, bindSkin, builtins } from '../state/content';
+import {
+  addCharacter3DFromSpec, addHumanoid, addIKForBone, addParticlePreset, addReliefModel, addSolid, addTracedShapes, applyAction, bindSkin, builtins,
+  imagePixels, imageTo3D, importImage, placeImage, placeModel,
+} from '../state/content';
+import { placeAudio } from '../audio/engine';
+import { applyLipSync } from '../audio/lipsyncApply';
+import { humanoidSpec } from '../core/character/humanoid';
+import { traceImage } from '../core/trace';
+import { SOLID_SHAPES, type SolidShape } from '../core/types';
+import { modelJoints, preloadModels } from '../render/models';
+import { useSettings } from '../state/settings';
+import { ASSET_KINDS, ASSET_STYLES, generateAssets } from './assetBuilder';
+import { addLesson, useMemory } from './memory';
 import { doc, project } from '../state/store';
 import { ui, useUI } from '../state/ui';
 import { captureFrame } from './capture';
@@ -167,7 +179,11 @@ export function registerAllTools(): void {
     description: 'Returns a picture of the scene at a frame, as the camera sees it. Use it to check your work: composition, poses, overlaps.',
     parameters: { type: 'object', properties: { frame: { type: 'number', description: 'Frame to look at. Default: the playhead.' } } },
     mutates: false,
-    run: ({ frame }) => ({ result: { frame: frame ?? ui().frame, note: 'Image attached.' }, image: captureFrame(896, frame ?? ui().frame) }),
+    run: async ({ frame }) => {
+      // 3D layers must be loaded before the picture is taken, or they would be missing from it.
+      await preloadModels(project());
+      return { result: { frame: frame ?? ui().frame, note: 'Image attached.' }, image: captureFrame(896, frame ?? ui().frame) };
+    },
   });
 
   registerTool({
@@ -282,6 +298,7 @@ export function registerAllTools(): void {
         hairStyle: { type: 'string', enum: ['short', 'long', 'spiky', 'bald'] }, sleeves: { type: 'string', enum: ['short', 'long'] },
         build: { type: 'number', description: '0.8 slim to 1.3 stocky.' }, headScale: { type: 'number', description: '1 realistic to 1.5 big cartoon head.' },
         view: { type: 'string', enum: [...VIEW_NAMES] }, facing: { type: 'string', enum: ['right', 'left'], description: 'Side views face right by default.' },
+        style: { type: 'string', enum: ['2d', '3d'], description: '2d (default) is a flat vector puppet. 3d builds the same character as a 3D body drawn cel-shaded; it uses the same bones and actions.' },
       },
       required: ['name'],
     },
@@ -289,8 +306,11 @@ export function registerAllTools(): void {
     summarize: (a) => `Add character "${a.name}"`,
     run: (a) => {
       const p = project();
-      const { x, y, view, facing, ...params } = a;
-      const id = addHumanoid({ height: Math.round(p.height * 0.55), ...params }, { x: x ?? p.width / 2, y: y ?? Math.round(p.height * 0.86) });
+      const { x, y, view, facing, style, ...params } = a;
+      const at = { x: x ?? p.width / 2, y: y ?? Math.round(p.height * 0.86) };
+      const id = style === '3d'
+        ? addCharacter3DFromSpec(humanoidSpec({ height: Math.round(p.height * 0.55), ...params }), at)
+        : addHumanoid({ height: Math.round(p.height * 0.55), ...params }, at);
       const patch: Record<string, unknown> = {};
       if (view) patch.currentView = view;
       if (facing === 'left') patch.scaleX = -1;
@@ -702,6 +722,197 @@ export function registerAllTools(): void {
       let n = 0;
       for (let i = 0; i < Math.max(1, a.steps ?? 1); i++) if (doc.undo()) n++;
       return { undone: n };
+    },
+  });
+  // --- 3D ------------------------------------------------------------------------------------------
+
+  registerTool({
+    name: 'add_3d_shape',
+    description: `Adds a 3D solid (${SOLID_SHAPES.join(', ')}) as a layer, drawn cel-shaded so it matches 2D art. Turn it with set_properties rotX (tilt), rotY (turn) and rotZ (roll), which can be keyed; shadeSteps (1 to 3), shade, outline and outlineColor set the look.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        shape: { type: 'string', enum: [...SOLID_SHAPES] }, name: { type: 'string' }, color: { type: 'string' },
+        x: { type: 'number' }, y: { type: 'number' }, size: { type: 'number', description: 'Height of the layer box in pixels.' },
+        rotX: { type: 'number' }, rotY: { type: 'number' }, rotZ: { type: 'number' }, depth: { type: 'number' },
+      },
+      required: ['shape'],
+    },
+    mutates: true,
+    summarize: (a) => `Add 3D ${a.shape}`,
+    run: (a) => {
+      const id = addSolid(a.shape as SolidShape, a.color ?? '#7c5cff', a.x !== undefined || a.y !== undefined ? { x: a.x ?? project().width / 2, y: a.y ?? project().height / 2 } : undefined);
+      const patch: Record<string, unknown> = {};
+      if (a.name) patch.name = a.name;
+      if (a.size) Object.assign(patch, { width: a.size, height: a.size });
+      for (const k of ['rotX', 'rotY', 'rotZ', 'depth']) if (a[k] !== undefined) patch[k] = a[k];
+      if (Object.keys(patch).length) patchNode(id, patch, 'Set up 3D shape');
+      return { id, name: scene().nodes[id].name };
+    },
+  });
+
+  registerTool({
+    name: 'set_joint_3d',
+    description: 'Turns one joint of a 3D model in depth, in degrees about x (tilt), y (turn) and z (roll). For a 3D character, pass the character and a bone name (for example head with y 40 to look to its left); for an imported model, pass the model layer and one of its joint names (get_node lists them). This adds to the pose from the 2D skeleton and can be keyed.',
+    parameters: {
+      type: 'object',
+      properties: { node: NODE_REF, joint: { type: 'string' }, x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' }, frame: { type: 'number' }, key: { type: 'boolean' }, ease: EASE },
+      required: ['node', 'joint'],
+    },
+    mutates: true,
+    summarize: (a) => `Turn ${a.joint} of ${a.node} in 3D`,
+    run: async (a) => {
+      let n = resolveNode(a.node);
+      if (n.type !== 'model3d') {
+        const s = scene();
+        const body = [n.id, ...subtreeIds(s, n.id)].map((id) => s.nodes[id]).find((c) => c?.type === 'model3d');
+        if (!body) throw new Error(`${n.name} has no 3D body. Only 3D characters and 3D model layers have 3D joints.`);
+        n = body;
+      }
+      await preloadModels(project());
+      const joints = n.type === 'model3d' ? modelJoints(project().assets[n.assetId]) : [];
+      if (!joints.includes(a.joint)) throw new Error(`No joint "${a.joint}". Joints: ${joints.slice(0, 60).join(', ')}`);
+      const values: Record<string, KeyValue> = {};
+      for (const axis of ['x', 'y', 'z']) if (typeof a[axis] === 'number') values[`j:${a.joint}:${axis}`] = a[axis];
+      setProps(n.id, values, { frame: a.frame, key: a.key === undefined ? 'auto' : a.key, ease: a.ease as Ease | undefined });
+      return { ok: true };
+    },
+  });
+
+  registerTool({
+    name: 'image_to_3d',
+    description: 'Turns an image layer into a 3D object: the picture is puffed up into a rounded solid that can turn in depth. Works best on a cut-out of a single object. The image layer is kept, hidden.',
+    parameters: { type: 'object', properties: { node: NODE_REF }, required: ['node'] },
+    mutates: true,
+    summarize: (a) => `Make ${a.node} a 3D object`,
+    run: (a) => {
+      const id = imageTo3D(resolveNode(a.node).id);
+      if (!id) throw new Error('That layer is not an image.');
+      return { id, name: scene().nodes[id].name };
+    },
+  });
+
+  // --- art -------------------------------------------------------------------------------------------
+
+  registerTool({
+    name: 'generate_asset',
+    description: `Draws artwork with the user's OpenAI image key and adds it to the scene. It takes up to a minute and costs the user money, so use it when art is asked for or clearly needed. kind: ${ASSET_KINDS.map((k) => k.id).join(', ')}. style: ${ASSET_STYLES.map((k) => k.id).join(', ')}. A background fills the stage behind everything; other kinds are cut out on transparency. as3d makes the result a 3D object.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        description: { type: 'string', description: 'What to draw, in detail.' },
+        kind: { type: 'string', enum: ASSET_KINDS.map((k) => k.id) }, style: { type: 'string', enum: ASSET_STYLES.map((k) => k.id) },
+        as3d: { type: 'boolean' }, name: { type: 'string' }, x: { type: 'number' }, y: { type: 'number' },
+      },
+      required: ['description', 'kind'],
+    },
+    mutates: true,
+    summarize: (a) => `Draw ${a.kind}: ${String(a.description).slice(0, 40)}`,
+    run: async (a) => {
+      const kind = ASSET_KINDS.find((k) => k.id === a.kind)!;
+      const solid = !!a.as3d && kind.transparent;
+      let url = '';
+      await generateAssets({ description: a.description, kind: kind.id, style: a.style ?? 'flat', shape: kind.shape, quality: 'high', transparent: kind.transparent, count: 1, model: useSettings.getState().imageModel }, (u) => (url = u));
+      const name = a.name ?? String(a.description).split(/\s+/).slice(0, 4).join(' ');
+      const p = project();
+      const at = a.x !== undefined || a.y !== undefined ? { x: a.x ?? p.width / 2, y: a.y ?? p.height / 2 } : undefined;
+      if (solid) return { id: addReliefModel(name, url, {}, at), kind: '3D object' };
+      const asset = await importImage(`${name}.png`, url, 'image/png');
+      const id = placeImage(asset, at);
+      if (kind.id === 'background' && asset.width && asset.height) {
+        const k = Math.max(p.width / asset.width, p.height / asset.height);
+        patchNode(id, { width: asset.width * k, height: asset.height * k, x: p.width / 2, y: p.height / 2, depth: 600 }, 'Place background');
+        reorder(id, 'bottom');
+      }
+      return { id, name: scene().nodes[id].name, kind: 'image' };
+    },
+  });
+
+  registerTool({
+    name: 'trace_image',
+    description: 'Converts an image layer into editable flat-colour vector shapes (a group with one shape per colour). Best for flat cartoon art. The image is kept, hidden.',
+    parameters: { type: 'object', properties: { node: NODE_REF, colors: { type: 'integer', description: '2 to 32, default 8.' } }, required: ['node'] },
+    mutates: true,
+    summarize: (a) => `Trace ${a.node} to vectors`,
+    run: async (a) => {
+      const n = resolveNode(a.node);
+      if (n.type !== 'image') throw new Error(`${n.name} is not an image layer.`);
+      const pixels = await imagePixels(project().assets[n.assetId]);
+      const shapes = traceImage(pixels, { colors: a.colors ?? 8 });
+      const id = addTracedShapes(n.id, shapes, pixels);
+      if (!id) throw new Error('Nothing could be traced from that image.');
+      return { id, shapes: shapes.length };
+    },
+  });
+
+  registerTool({
+    name: 'list_assets',
+    description: 'Lists the imported and generated files in the project (images, sounds, 3D models) and the audio clips on this scene\'s timeline.',
+    parameters: { type: 'object', properties: {} },
+    mutates: false,
+    run: () => ({
+      assets: Object.values(project().assets).filter((x) => x.kind !== 'character3d').map((x) => ({ id: x.id, name: x.name, kind: x.kind })),
+      audioClips: scene().audio.map((c) => ({ id: c.id, name: c.name, startFrame: c.start, seconds: r1(c.length) })),
+    }),
+  });
+
+  registerTool({
+    name: 'place_asset',
+    description: 'Adds an asset from list_assets to the scene: an image or 3D model as a layer at x, y; a sound on the timeline at a frame.',
+    parameters: { type: 'object', properties: { asset: { type: 'string', description: 'Asset id or name.' }, x: { type: 'number' }, y: { type: 'number' }, frame: { type: 'number' } }, required: ['asset'] },
+    mutates: true,
+    summarize: (a) => `Place ${a.asset}`,
+    run: (a) => {
+      const p = project();
+      const asset = p.assets[a.asset] ?? Object.values(p.assets).find((x) => x.name === a.asset || x.name.replace(/\.[a-z0-9]+$/i, '') === a.asset);
+      if (!asset) throw new Error(`No asset matches "${a.asset}". Call list_assets.`);
+      const at = a.x !== undefined || a.y !== undefined ? { x: a.x ?? p.width / 2, y: a.y ?? p.height / 2 } : undefined;
+      if (asset.kind === 'image') return { id: placeImage(asset, at) };
+      if (asset.kind === 'model') return { id: placeModel(asset, at) };
+      if (asset.kind === 'audio') return { clip: placeAudio(asset, a.frame ?? ui().frame) };
+      throw new Error('That asset belongs to a 3D character and cannot be placed on its own.');
+    },
+  });
+
+  registerTool({
+    name: 'lip_sync_audio',
+    description: 'Keys a character\'s mouth to a sound clip on the timeline (see list_assets for clips). sensitivity above 1 opens the mouth on quieter sound; hold is the shortest time a mouth shape stays, in frames.',
+    parameters: { type: 'object', properties: { character: NODE_REF, clip: { type: 'string', description: 'Audio clip id or name. Default: the first clip.' }, sensitivity: { type: 'number' }, hold: { type: 'integer' } }, required: ['character'] },
+    mutates: true,
+    summarize: (a) => `Lip-sync ${a.character} to audio`,
+    run: async (a) => {
+      const ch = resolveCharacter(a.character);
+      const clips = scene().audio;
+      const clip = a.clip ? clips.find((c) => c.id === a.clip || c.name === a.clip) : clips[0];
+      if (!clip) throw new Error('There is no such audio clip on the timeline. Place a sound first.');
+      return { mouthShapes: await applyLipSync(clip.id, ch.id, { sensitivity: a.sensitivity ?? 1, minHold: a.hold ?? 2 }) };
+    },
+  });
+
+  // --- memory ----------------------------------------------------------------------------------------
+
+  registerTool({
+    name: 'remember',
+    description: 'Saves a short lesson to your long-term memory, which is given back to you at the start of every future conversation with this user. Use it after feedback and when the user states a preference. Write one general, reusable sentence, not a description of the current scene.',
+    parameters: { type: 'object', properties: { lesson: { type: 'string' }, topic: { type: 'string', description: 'One or two words, e.g. "timing", "walk cycles", "camera", "style".' } }, required: ['lesson'] },
+    mutates: false,
+    summarize: (a) => `Remember: ${String(a.lesson).slice(0, 60)}`,
+    run: (a) => {
+      if (!useMemory.getState().enabled) return { saved: false, note: 'The user has switched memory off.' };
+      const lesson = addLesson(a.lesson, a.topic ?? 'general', 'feedback');
+      if (!lesson) throw new Error('The lesson is too short to be useful.');
+      return { saved: true, lessons: useMemory.getState().lessons.length };
+    },
+  });
+
+  registerTool({
+    name: 'get_memory',
+    description: 'Returns everything in your long-term memory: saved lessons and the user\'s past ratings of your work.',
+    parameters: { type: 'object', properties: {} },
+    mutates: false,
+    run: () => {
+      const m = useMemory.getState();
+      return { enabled: m.enabled, lessons: m.lessons.map((l) => ({ topic: l.topic, text: l.text })), ratings: m.feedback.slice(-20).map((f) => ({ rating: f.rating, request: f.request, comment: f.comment })) };
     },
   });
 }

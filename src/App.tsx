@@ -14,6 +14,7 @@ import { ChatPanel } from './ui/ChatPanel';
 import { ExportDialog } from './ui/ExportDialog';
 import { TraceDialog } from './ui/TraceDialog';
 import { AssetBuilder } from './ui/AssetBuilder';
+import { MemoryDialog } from './ui/MemoryDialog';
 import { UpdateDialog } from './ui/UpdateDialog';
 import { dailyUpdateCheck } from './state/updates';
 import { GraphEditor } from './ui/GraphEditor';
@@ -197,6 +198,7 @@ export function App() {
       {dialog === 'export' && doc.project && <ExportDialog />}
       {dialog === 'trace' && doc.project && <TraceDialog />}
       {dialog === 'update' && <UpdateDialog />}
+      {dialog === 'memory' && <MemoryDialog />}
       {dialog === 'assetBuilder' && doc.project && <AssetBuilder />}
       {dialog === 'shortcuts' && (
         <Dialog title="Keyboard shortcuts" onClose={() => set({ dialog: null })}>

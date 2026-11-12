@@ -308,3 +308,14 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; gap: 6
 .editor.full .center { position: relative; }
 .full-bar { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: color-mix(in srgb, var(--bg-1) 92%, transparent); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); z-index: 5; }
 .full-bar input[type='range'] { width: min(46vw, 620px); }
+
+/* Assistant feedback and memory */
+.feedback { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--accent, #7c5cff); border-radius: 8px; background: rgba(124, 92, 255, 0.08); }
+.feedback input { height: 28px; width: 100%; }
+.memory-add { display: flex; gap: 6px; }
+.memory-add input { flex: 1; height: 28px; }
+.memory-list { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow: auto; }
+.memory-item { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; background: var(--bg-2); border-radius: 6px; line-height: 1.4; }
+.chip.rate-good { color: #7ee2a8; }
+.chip.rate-meh { color: #f0cf8a; }
+.chip.rate-bad { color: #ff9fb1; }

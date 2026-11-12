@@ -26,10 +26,15 @@ One TypeScript codebase runs in the browser and as an installable desktop app.
 - **Asset Builder**: backgrounds, scenery, props, effects, textures and signs drawn by OpenAI's
   image model with your key, with selectors for type, art style, shape, quality, image model and
   number of variations, and the option to make the result a 3D object.
-- **AI assistant** that operates the app through the same commands as the interface: it builds
-  scenes, poses and animates characters, moves the camera, and checks its own work by looking at
-  the frame. It runs on ChatGPT or Claude, in Auto mode (acts immediately, everything undoable) or
-  Ask-first mode (shows the planned changes and waits).
+- **AI director and assistant** that operates the app through the same commands as the interface
+  and has a tool for every part of it: it stages scenes, poses and animates 2D and 3D
+  characters, turns joints in depth, moves the camera, lip-syncs, generates and traces art, and
+  checks its own work by looking at frames. It runs on Claude or ChatGPT, in Auto mode (acts
+  immediately, everything undoable) or Ask-first mode (shows the planned changes and waits).
+- **Feedback and memory**: rate each result Good, Meh or Bad, or press Polish it. A poor rating
+  sends the assistant back to review its own animation, fix it and save a lesson; saved lessons
+  and your ratings are given to it at the start of every later conversation. The memory is
+  stored on your computer and can be read, edited or erased from the chat panel.
 - **Timeline**: keyframes with easing, a graph editor, reusable action clips (walk, run, idle,
   blink, wave, jump, ...) placed as strips that loop and blend, audio tracks with waveforms, and
   markers. Every built-in clip has a version for each of the five views, so it plays correctly
