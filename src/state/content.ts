@@ -10,6 +10,7 @@ import { humanoidSpec, type HumanoidParams } from '../core/character/humanoid';
 import type { CharacterSpec } from '../core/character/spec';
 import { createGroup, createImage, createModel3D, createParticles, createShape } from '../core/factory';
 import { newId } from '../core/ids';
+import { layerOverPlate, PLATE_TAG, type GenerationRecord, type Rect01 } from '../core/localGen';
 import { apply, IDENTITY, invert } from '../core/math';
 import { PARTICLE_PRESETS } from '../core/particles';
 import { transformPath } from '../core/path';
@@ -147,6 +148,14 @@ export async function importImage(name: string, dataUrl: string, mime = 'image/p
   return asset;
 }
 
+/** Adds a locally generated image to the project's assets, with everything needed to reproduce it. */
+export async function importGeneratedImage(name: string, dataUrl: string, generation: GenerationRecord): Promise<Asset> {
+  const { width, height } = await imageSize(dataUrl);
+  const asset: Asset = { id: newId('img'), name, kind: 'image', mime: 'image/png', dataUrl, width, height, generation };
+  addAsset(asset);
+  return asset;
+}
+
 /** Adds an image asset to the scene, scaled down to fit the stage if it is larger. */
 export function placeImage(asset: Asset, at?: { x: number; y: number }): ID {
   const p = project();
@@ -159,6 +168,42 @@ export function placeImage(asset: Asset, at?: { x: number; y: number }): ID {
   addNode(node, null, undefined, 'Place image');
   ui().select([node.id]);
   return node.id;
+}
+
+/** Places a generated shot so it fills the stage, for judging it at the size it will be seen. */
+export function placeFullFrame(asset: Asset): ID {
+  const p = project();
+  const id = placeImage(asset);
+  if (asset.width && asset.height) {
+    const k = Math.max(p.width / asset.width, p.height / asset.height);
+    patchNode(id, { width: Math.round(asset.width * k), height: Math.round(asset.height * k), x: p.width / 2, y: p.height / 2 }, 'Fill the frame');
+  }
+  return id;
+}
+
+/**
+ * Places a picture over part of a background plate layer in the current scene, lined up with the
+ * part of the plate it was generated from (`r`, 0..1 of the plate image). It sits at the plate's
+ * depth, just in front of it, so the plate itself is never changed.
+ */
+export function placeOverPlate(asset: Asset, plateNodeId: ID, r: Rect01): ID | null {
+  const s = scene();
+  const plate = s.nodes[plateNodeId];
+  if (!plate || plate.type !== 'image') return null;
+  const box = layerOverPlate(plate, r);
+  const node = createImage(asset.name.replace(/\.[a-z0-9]+$/i, ''), asset.id, Math.round(box.width), Math.round(box.height), {
+    x: box.x, y: box.y, depth: plate.depth, zOrder: plate.zOrder + 1,
+  });
+  const list = plate.parent ? s.nodes[plate.parent]?.children ?? s.roots : s.roots;
+  addNode(node, plate.parent, list.indexOf(plate.id) + 1, 'Place over plate');
+  ui().select([node.id]);
+  return node.id;
+}
+
+/** The background plate layer for an image in the current scene, if it has been placed there. */
+export function plateNodeFor(assetId: ID): ImageNode | null {
+  const n = Object.values(scene().nodes).find((x) => x.type === 'image' && x.assetId === assetId && x.tag === PLATE_TAG);
+  return (n as ImageNode | undefined) ?? null;
 }
 
 const MODEL_FORMATS: Record<string, Asset['format']> = { glb: 'glb', gltf: 'gltf', obj: 'obj' };

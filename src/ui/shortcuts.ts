@@ -73,6 +73,7 @@ export function handleKey(e: KeyboardEvent): void {
     }
     if (e.key.toLowerCase() === 'c') { u.set({ dialog: 'characterCreator' }); return stop(); }
     if (e.key.toLowerCase() === 'a') { u.set({ dialog: 'assetBuilder' }); return stop(); }
+    if (e.key.toLowerCase() === 'g') { u.set({ dialog: 'localGen' }); return stop(); }
     return;
   }
   if (e.shiftKey && !mod) {

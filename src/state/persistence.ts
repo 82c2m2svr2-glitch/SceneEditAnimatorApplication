@@ -156,6 +156,8 @@ export interface NativeBridge {
   secretsAvailable(): Promise<boolean>;
   getSecret(name: string): Promise<string | null>;
   setSecret(name: string, value: string): Promise<void>;
+  /** Sends one request to the local image generator from the desktop process (no CORS, loopback only). */
+  localGen?(req: { base: string; method: 'GET' | 'POST'; path: string; body?: string; auth?: string; timeoutMs?: number }): Promise<{ ok: boolean; status: number; text?: string; error?: string }>;
   /** Whether this copy can replace itself with a downloaded release (the portable Windows .exe). */
   canSelfUpdate?(): Promise<{ ok: boolean; reason?: string; path?: string }>;
   /** Downloads and checks a release .exe, then closes DreamForge and reopens it on the new version. */

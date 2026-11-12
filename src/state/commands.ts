@@ -7,8 +7,9 @@ import {
   animated, COMMON_ANIM_PROPS, EXTRA_ANIM_PROPS, getEval, hasKeyAt, removeKeyAt, upsertKey, type EvalScene, evaluateScene,
 } from '../core/anim';
 import { exposureAt } from '../core/drawing';
-import { createGroup, createScene } from '../core/factory';
+import { createGroup, createImage, createScene } from '../core/factory';
 import { newId } from '../core/ids';
+import { PLATE_DEPTH, PLATE_TAG, plateLayout, type PlateInfo, type StylePreset } from '../core/localGen';
 import { apply, decompose, IDENTITY, invert, mul, type Vec } from '../core/math';
 import { ancestorOfType, extractSubtree, insertBundle, subtreeIds, topLevel, uniqueName, type RigFile } from '../core/tree';
 import {
@@ -642,6 +643,59 @@ export function removeAsset(id: ID): void {
   doc.apply('Remove asset', (d) => {
     delete d.assets[id];
     for (const s of d.scenes) s.audio = s.audio.filter((a) => a.assetId !== id);
+  });
+}
+
+/** Marks an image as the fixed background of a camera angle, or clears the mark with null. */
+export function setAssetPlate(id: ID, plate: PlateInfo | null): void {
+  doc.apply(plate ? 'Mark background plate' : 'Unmark background plate', (d) => {
+    const a = d.assets[id];
+    if (!a) return;
+    if (plate) a.plate = { angle: plate.angle.trim() || a.name };
+    else delete a.plate;
+  });
+}
+
+/**
+ * Puts a background plate, unchanged, behind everything in each listed scene that does not have it
+ * yet. The layer is locked so drawing characters and foreground on top cannot move it. Returns how
+ * many scenes received it.
+ */
+export function placePlate(assetId: ID, sceneIds: ID[]): number {
+  let placed = 0;
+  doc.apply('Place background plate', (d) => {
+    const a = d.assets[assetId];
+    if (!a || a.kind !== 'image') return;
+    const w = a.width || d.width;
+    const h = a.height || d.height;
+    for (const s of d.scenes) {
+      if (!sceneIds.includes(s.id)) continue;
+      if (Object.values(s.nodes).some((n) => n.type === 'image' && n.assetId === assetId && n.tag === PLATE_TAG)) continue;
+      const box = plateLayout(d, { width: w, height: h }, s.camera, PLATE_DEPTH);
+      const name = uniqueName(s, `${a.plate?.angle ?? a.name.replace(/\.[a-z0-9]+$/i, '')} (plate)`);
+      const n = createImage(name, assetId, Math.round(box.width), Math.round(box.height), { x: box.x, y: box.y, depth: box.depth, locked: true, tag: PLATE_TAG });
+      s.nodes[n.id] = n;
+      s.roots.unshift(n.id);
+      placed++;
+    }
+  });
+  return placed;
+}
+
+/** Adds or replaces a style preset saved with the project. */
+export function saveStylePreset(preset: StylePreset): void {
+  doc.apply('Save style preset', (d) => {
+    const list = (d.styles ??= []);
+    const copy = { id: preset.id, name: preset.name.trim() || 'Style', positive: preset.positive, negative: preset.negative };
+    const i = list.findIndex((x) => x.id === copy.id);
+    if (i >= 0) list[i] = copy;
+    else list.push(copy);
+  });
+}
+
+export function removeStylePreset(id: ID): void {
+  doc.apply('Delete style preset', (d) => {
+    d.styles = (d.styles ?? []).filter((x) => x.id !== id);
   });
 }
 

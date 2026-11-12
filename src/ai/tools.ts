@@ -11,16 +11,21 @@ import {
 } from '../core/types';
 import {
   addNode, addScene, clearTrack, currentValue, deleteKeys, deleteNodes, duplicateNodes, isAnimatable, moveNodes, patchNode,
-  patchScene, removeStrip, reorder, scene, setCamera, setFrame, setKeys, setProps,
+  patchScene, placePlate, removeStrip, reorder, scene, setAssetPlate, setCamera, setFrame, setKeys, setProps,
 } from '../state/commands';
 import {
   addCharacter3DFromSpec, addHumanoid, addIKForBone, addParticlePreset, addReliefModel, addSolid, addTracedShapes, applyAction, bindSkin, builtins,
-  imagePixels, imageTo3D, importImage, placeImage, placeModel,
+  imagePixels, imageTo3D, importGeneratedImage, importImage, placeFullFrame, placeImage, placeModel, placeOverPlate, plateNodeFor,
 } from '../state/content';
 import { placeAudio } from '../audio/engine';
 import { applyLipSync } from '../audio/lipsyncApply';
 import { humanoidSpec } from '../core/character/humanoid';
 import { traceImage } from '../core/trace';
+import {
+  angleFromName, BUILT_IN_STYLES, CEL_90S, DEFAULT_LOCAL_SETTINGS, describeRecord, LOCAL_SIZES, recordName, REGION_PRESETS, regionInSource,
+  type LocalGenMode, type LocalGenSettings,
+} from '../core/localGen';
+import { checkLocalGenerator, cropRegion, generateLocal } from './localGen';
 import { SOLID_SHAPES, type SolidShape } from '../core/types';
 import { modelJoints, preloadModels } from '../render/models';
 import { useSettings } from '../state/settings';
@@ -837,6 +842,110 @@ export function registerAllTools(): void {
         reorder(id, 'bottom');
       }
       return { id, name: scene().nodes[id].name, kind: 'image' };
+    },
+  });
+
+  // --- local image generation (SD.Next on this computer) -------------------------------------------
+
+  const findImageAsset = (ref: string) => {
+    const assets = Object.values(project().assets);
+    const a = project().assets[ref] ?? assets.find((x) => x.name === ref || x.name.replace(/\.[a-z0-9]+$/i, '') === ref || x.plate?.angle === ref);
+    if (!a) throw new Error(`No asset matches "${ref}". Call list_assets.`);
+    if (a.kind !== 'image' || !a.dataUrl) throw new Error(`${a.name} is not an image.`);
+    return a;
+  };
+
+  registerTool({
+    name: 'check_local_generator',
+    description: 'Checks whether the local image generator (SD.Next on this computer, free, no API key) is running, and lists its models, samplers and OpenVINO device.',
+    parameters: { type: 'object', properties: {} },
+    mutates: false,
+    summarize: () => 'Check the local image generator',
+    run: async () => {
+      const st = await checkLocalGenerator();
+      return { ...st, checkpoints: st.checkpoints.map((c) => c.title) };
+    },
+  });
+
+  registerTool({
+    name: 'local_generate_image',
+    description: `Draws a ${LOCAL_SIZES[0].width}x${LOCAL_SIZES[0].height} preview with the local generator (SD.Next on this computer, free) and saves it to the project's assets with its full settings (prompt, model, seed, size, steps, CFG, denoise). mode txt2img: a new shot from the prompt. img2img: a variation of the image asset in source; denoise 0.2-0.35 keeps the composition, 0.6+ mostly redraws. region: changes only one region of a background plate (left, center, right, lower, lowerLeft, lowerRight) for characters or foreground; the result is saved cropped to that region. style is a preset id or name (default: ${CEL_90S.name}). place: "scene" also adds it to the current scene (region results line up over the plate). Set seed to repeat a result exactly. Generation runs on this laptop and can take minutes the first time.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: 'The shot, or what to put in the region. For variations, what to change.' },
+        mode: { type: 'string', enum: ['txt2img', 'img2img', 'region'] },
+        source: { type: 'string', description: 'Image asset id, name or plate angle (img2img and region).' },
+        denoise: { type: 'number', description: '0.05 to 1. Default 0.3.' },
+        region: { type: 'string', enum: REGION_PRESETS.map((r) => r.id) },
+        style: { type: 'string' }, negative: { type: 'string' }, seed: { type: 'integer' },
+        size: { type: 'string', enum: LOCAL_SIZES.map((z) => z.id) },
+        steps: { type: 'integer' }, cfg: { type: 'number' },
+        place: { type: 'string', enum: ['none', 'scene'] },
+      },
+      required: ['prompt'],
+    },
+    mutates: true,
+    summarize: (a) => `Generate locally (${a.mode ?? 'txt2img'}): ${String(a.prompt).slice(0, 40)}`,
+    run: async (a) => {
+      const p = project();
+      const mode: LocalGenMode = a.mode ?? 'txt2img';
+      const styles = [...BUILT_IN_STYLES, ...(p.styles ?? [])];
+      const style = a.style ? styles.find((x) => x.id === a.style || x.name.toLowerCase() === String(a.style).toLowerCase()) : CEL_90S;
+      if (a.style && !style) throw new Error(`No style "${a.style}". Styles: ${styles.map((x) => x.name).join(', ')}.`);
+      const size = LOCAL_SIZES.find((z) => z.id === (a.size ?? 'wide')) ?? LOCAL_SIZES[0];
+      const region = REGION_PRESETS.find((r) => r.id === (a.region ?? 'lower'))!.rect;
+      const src = mode === 'txt2img' ? null : findImageAsset(String(a.source ?? ''));
+      const settings: LocalGenSettings = {
+        ...DEFAULT_LOCAL_SETTINGS, mode, prompt: String(a.prompt ?? ''), negativePrompt: a.negative ?? '', style: style ?? null,
+        seed: Number.isInteger(a.seed) ? a.seed : -1, width: size.width, height: size.height,
+        steps: a.steps ?? DEFAULT_LOCAL_SETTINGS.steps, cfgScale: a.cfg ?? DEFAULT_LOCAL_SETTINGS.cfgScale,
+        denoisingStrength: a.denoise ?? DEFAULT_LOCAL_SETTINGS.denoisingStrength,
+        ...(mode === 'region' ? { region } : {}),
+      };
+      const res = await generateLocal(settings, { source: src ? { assetId: src.id, name: src.name, dataUrl: src.dataUrl } : undefined });
+      const url = mode === 'region' ? await cropRegion(res.dataUrl, region) : res.dataUrl;
+      const asset = await importGeneratedImage(`${recordName(res.record)}.png`, url, res.record);
+      let node: string | null = null;
+      if (a.place === 'scene') {
+        const plate = mode === 'region' && src ? plateNodeFor(src.id) : null;
+        node = plate && src?.width && src.height
+          ? placeOverPlate(asset, plate.id, regionInSource(region, { width: src.width, height: src.height }, size))
+          : placeFullFrame(asset);
+      }
+      return { asset: asset.id, name: asset.name, node, settings: describeRecord(res.record), seed: res.record.seed, checkpoint: res.record.checkpoint };
+    },
+  });
+
+  registerTool({
+    name: 'background_plate',
+    description: 'Background plates: one finished background per camera angle, reused unchanged and locked behind every shot from that angle so the set never shifts. action "mark" makes an image asset the plate for an angle; "place" adds it behind everything in the current scene or in all scenes; "unmark" clears it; "list" shows the plates.',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['list', 'mark', 'place', 'unmark'] },
+        asset: { type: 'string', description: 'Image asset id, name or plate angle.' },
+        angle: { type: 'string', description: 'Camera angle name, for mark.' },
+        scenes: { type: 'string', enum: ['current', 'all'] },
+      },
+      required: ['action'],
+    },
+    mutates: true,
+    summarize: (a) => `Background plate: ${a.action} ${a.asset ?? ''}`,
+    run: async (a) => {
+      if (a.action === 'list') return Object.values(project().assets).filter((x) => x.plate).map((x) => ({ id: x.id, name: x.name, angle: x.plate!.angle }));
+      const asset = findImageAsset(String(a.asset ?? ''));
+      if (a.action === 'mark') {
+        setAssetPlate(asset.id, { angle: a.angle ?? angleFromName(asset.name) });
+        return { id: asset.id, angle: project().assets[asset.id].plate?.angle };
+      }
+      if (a.action === 'unmark') {
+        setAssetPlate(asset.id, null);
+        return { id: asset.id };
+      }
+      if (!asset.plate) setAssetPlate(asset.id, { angle: angleFromName(asset.name) });
+      const ids = a.scenes === 'all' ? project().scenes.map((x) => x.id) : [scene().id];
+      return { placedInScenes: placePlate(asset.id, ids) };
     },
   });
 

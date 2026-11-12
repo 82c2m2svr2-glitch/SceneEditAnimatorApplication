@@ -16,6 +16,7 @@ import { TraceDialog } from './ui/TraceDialog';
 import { AssetBuilder } from './ui/AssetBuilder';
 import { MemoryDialog } from './ui/MemoryDialog';
 import { UpdateDialog } from './ui/UpdateDialog';
+import { LocalGenDialog } from './ui/LocalGenDialog';
 import { startupUpdateCheck } from './state/updates';
 import { GraphEditor } from './ui/GraphEditor';
 import { LeftPanel } from './ui/LeftPanel';
@@ -200,6 +201,7 @@ export function App() {
       {dialog === 'update' && <UpdateDialog />}
       {dialog === 'memory' && <MemoryDialog />}
       {dialog === 'assetBuilder' && doc.project && <AssetBuilder />}
+      {dialog === 'localGen' && doc.project && <LocalGenDialog />}
       {dialog === 'shortcuts' && (
         <Dialog title="Keyboard shortcuts" onClose={() => set({ dialog: null })}>
           <div className="kbd-list">
