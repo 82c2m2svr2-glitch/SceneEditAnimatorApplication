@@ -1,17 +1,28 @@
 # Builds the portable Windows .exe on a Windows machine and publishes it as a GitHub Release.
-# Run it from the Actions tab ("Run workflow"), or push a tag such as v0.1.0.
+#
+# It runs by itself whenever new code reaches the default branch (and can be run by hand from the
+# Actions tab with "Run workflow"). Each build gets its own version number: the major and minor
+# numbers from package.json plus this workflow's run number, such as 0.2.37. DreamForge's Update
+# button compares that number with its own, so every published build is offered as an update.
+# Nothing is published unless the typecheck, lint and unit tests pass.
 name: Windows build
 
 on:
   workflow_dispatch:
   push:
-    tags: ['v*']
+    paths-ignore: ['**.md']
 
 permissions:
   contents: write
 
+# A newer push replaces a build that is still running for the same branch.
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
+    if: github.event_name == 'workflow_dispatch' || github.ref_name == github.event.repository.default_branch
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,6 +31,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Set the build version
+        shell: bash
+        run: |
+          base="$(node -p "require('./package.json').version.split('.').slice(0, 2).join('.')")"
+          version="$base.${{ github.run_number }}"
+          npm version "$version" --no-git-tag-version --allow-same-version
+          echo "VERSION=$version" >> "$GITHUB_ENV"
       - run: npm run check
       - run: npm run dist:win
       - uses: actions/upload-artifact@v4
@@ -31,11 +49,15 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          # Passed through the environment, never pasted into the script, so a commit message
+          # cannot change what runs.
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
-          version="v$(node -p "require('./package.json').version")"
-          if gh release view "$version" > /dev/null 2>&1; then
-            gh release upload "$version" release/*.exe --clobber
+          tag="v$VERSION"
+          notes="${COMMIT_MESSAGE:-$(git log -1 --format=%B)}"
+          printf '%s\n\nBuilt from %s.\n\nAlready have DreamForge? Press Update in its menu bar. New here? Download the .exe and double-click it; no install needed. Windows may warn that the file is unsigned: choose More info, then Run anyway.\n' "$notes" "${GITHUB_SHA::7}" > notes.md
+          if gh release view "$tag" > /dev/null 2>&1; then
+            gh release upload "$tag" release/*.exe --clobber
           else
-            gh release create "$version" release/*.exe --target "$GITHUB_SHA" --title "DreamForge $version" \
-              --notes "Portable Windows build. Download the .exe and double-click it; no install needed. Windows may warn that the file is unsigned: choose More info, then Run anyway."
+            gh release create "$tag" release/*.exe --target "$GITHUB_SHA" --title "DreamForge $VERSION" --notes-file notes.md --latest
           fi

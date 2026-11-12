@@ -156,6 +156,11 @@ export interface NativeBridge {
   secretsAvailable(): Promise<boolean>;
   getSecret(name: string): Promise<string | null>;
   setSecret(name: string, value: string): Promise<void>;
+  /** Whether this copy can replace itself with a downloaded release (the portable Windows .exe). */
+  canSelfUpdate?(): Promise<{ ok: boolean; reason?: string; path?: string }>;
+  /** Downloads and checks a release .exe, then closes DreamForge and reopens it on the new version. */
+  installUpdate?(opts: { url: string; size?: number | null; sha256?: string | null }): Promise<{ ok: boolean; error?: string }>;
+  onUpdateProgress?(fn: (p: { received: number; total: number }) => void): () => void;
 }
 
 declare global {

@@ -43,7 +43,7 @@ const STYLE =
   'Neutral standing A-pose: arms straight and held clearly away from the torso, hands open, legs straight and slightly apart, so no body part overlaps another. ' +
   'Clean flat cartoon style: bold even outlines, solid flat colours, no gradients, no texture, no shading, no cast shadow. Pure white background. No text, no labels, no props, no ground line, a single figure only.';
 
-function dataUrlToBlob(url: string): Blob {
+export function dataUrlToBlob(url: string): Blob {
   const m = url.match(/^data:([^;]+);base64,(.*)$/);
   if (!m) throw new AssistantError('That image could not be read.');
   const bin = atob(m[2]);

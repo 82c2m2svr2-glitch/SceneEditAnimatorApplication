@@ -291,6 +291,8 @@ kbd { background: var(--bg-3); border: 1px solid var(--line); border-radius: 4px
 .cc-saved .del { position: absolute; top: 4px; right: 4px; opacity: 0; background: var(--bg-2); }
 .cc-saved:hover .del { opacity: 1; }
 
+.update-btn { background: rgba(52, 199, 120, 0.16); border-color: rgba(52, 199, 120, 0.55); color: #8ff0b8; }
+.update-btn:hover { background: rgba(52, 199, 120, 0.26); }
 .update-notes { white-space: pre-wrap; font: inherit; color: var(--dim); background: var(--bg-0); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin: 0; max-height: 220px; overflow: auto; }
 a.btn { text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
 
@@ -302,6 +304,15 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; gap: 6
 .asset-pick img { width: 100%; display: block; }
 .asset-pick.on { border-color: var(--accent, #7c5cff); }
 .asset-tick { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 50%; background: var(--accent, #7c5cff); color: #fff; display: grid; place-items: center; }
+.asset-pick:focus-visible { outline: 2px solid var(--accent, #7c5cff); outline-offset: 2px; }
+.asset-use-ref { position: absolute; right: 6px; bottom: 6px; height: 24px; padding: 0 8px; font-size: 11px; gap: 4px; opacity: 0; transition: opacity 0.12s; }
+.asset-pick:hover .asset-use-ref, .asset-pick:focus-within .asset-use-ref { opacity: 1; }
+.asset-refbox { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px dashed var(--line); border-radius: 8px; background: var(--bg-0); }
+.asset-refbox.over { border-color: var(--accent, #7c5cff); background: rgba(124, 92, 255, 0.08); }
+.asset-refs { display: flex; flex-wrap: wrap; gap: 6px; }
+.asset-ref { position: relative; width: 64px; height: 64px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); background: #fff; }
+.asset-ref img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.asset-ref-x { position: absolute; top: 2px; right: 2px; background: rgba(0, 0, 0, 0.6); color: #fff; border-radius: 50%; }
 
 /* Full-screen editing */
 .editor.full { grid-template-columns: 44px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }

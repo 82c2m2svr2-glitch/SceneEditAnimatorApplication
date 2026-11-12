@@ -80,7 +80,7 @@
       "category": "Graphics"
     },
     "portable": {
-      "artifactName": "DreamForge-${version}-windows.exe"
+      "artifactName": "DreamForge.exe"
     }
   }
 }

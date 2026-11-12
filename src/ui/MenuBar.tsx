@@ -1,8 +1,8 @@
-import { Bot, Download, Settings, Wand2 } from 'lucide-react';
+import { Bot, Download, RefreshCw, Settings, Wand2 } from 'lucide-react';
 import { importAudioDialog, importImagesDialog, importModelsDialog } from './Panels';
 import { humanoidSpec } from '../core/character/humanoid';
 import { SOLID_SHAPES } from '../core/types';
-import { APP_VERSION } from '../state/updates';
+import { APP_VERSION, useUpdate } from '../state/updates';
 import { createDrawing, createGroup, createRect, createShape, createText } from '../core/factory';
 import { ellipsePath, starPath } from '../core/path';
 import { PARTICLE_PRESETS } from '../core/particles';
@@ -57,6 +57,7 @@ export function MenuBar() {
   useDocRevision();
   const selection = useUI((s) => s.selection);
   const showChat = useUI((s) => s.showChat);
+  const update = useUpdate((s) => s.available);
   const set = useUI((s) => s.set);
   const p = doc.project;
   if (!p) return null;
@@ -160,6 +161,11 @@ export function MenuBar() {
       <TextField className="project-name" value={p.name} onChange={(v) => v && patchProject({ name: v }, 'Rename project')} />
       {doc.dirty && <span className="dirty-dot" title="Unsaved changes (autosaved to Recent projects)" />}
       <div className="spacer" />
+      {update && (
+        <button className="btn update-btn" onClick={() => set({ dialog: 'update' })} title={`DreamForge ${update.latest} is available: click to install it`}>
+          <RefreshCw size={14} /> Update to {update.latest}
+        </button>
+      )}
       <button className="btn primary" onClick={() => set({ dialog: 'characterCreator' })} title="Generate a character with AI and turn it into a rigged, animatable vector puppet">
         <Wand2 size={14} /> Character Creator
       </button>

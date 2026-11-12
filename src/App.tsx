@@ -16,7 +16,7 @@ import { TraceDialog } from './ui/TraceDialog';
 import { AssetBuilder } from './ui/AssetBuilder';
 import { MemoryDialog } from './ui/MemoryDialog';
 import { UpdateDialog } from './ui/UpdateDialog';
-import { dailyUpdateCheck } from './state/updates';
+import { startupUpdateCheck } from './state/updates';
 import { GraphEditor } from './ui/GraphEditor';
 import { LeftPanel } from './ui/LeftPanel';
 import { MenuBar } from './ui/MenuBar';
@@ -187,8 +187,8 @@ export function App() {
   const set = useUI((s) => s.set);
   useEffect(() => {
     void loadNativeSecrets();
-    // Once a day, quietly: mention a newer release without interrupting work.
-    void dailyUpdateCheck().then((info) => info && ui().toast(`DreamForge ${info.latest} is available. Open File > Check for updates to download it.`, 'info'));
+    // Quietly: a newer release shows the Update button in the menu bar, and is mentioned once.
+    void startupUpdateCheck().then((info) => info && ui().toast(`DreamForge ${info.latest} is available. Press Update in the menu bar to install it.`, 'info'));
   }, []);
   return (
     <div className="app">
