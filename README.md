@@ -25,7 +25,10 @@ One TypeScript codebase runs in the browser and as an installable desktop app.
   Everything you make is kept under **Created characters** for reuse in any project.
 - **Asset Builder**: backgrounds, scenery, props, effects, textures and signs drawn by OpenAI's
   image model with your key, with selectors for type, art style, shape, quality, image model and
-  number of variations, and the option to make the result a 3D object.
+  number of variations, and the option to make the result a 3D object. Add up to four **reference
+  images** (upload, drag in, paste, or pick one already in the project) and choose whether the
+  result should match their subject, their style or both; any result can be fed back as a
+  reference to refine it. The AI director can pass project images as references too.
 - **AI director and assistant** that operates the app through the same commands as the interface
   and has a tool for every part of it: it stages scenes, poses and animates 2D and 3D
   characters, turns joints in depth, moves the camera, lip-syncs, generates and traces art, and
@@ -53,7 +56,10 @@ One TypeScript codebase runs in the browser and as an installable desktop app.
 - **Multiple scenes** with cuts, fades, dissolves, wipes and slides.
 - **Full-screen editing** (Shift+F or F11) with only the stage, the tools and a playback bar, and
   keyboard shortcuts for everyday actions (press `?` in the app for the list).
-- **Update check**: View > Check for updates compares your copy with the newest release.
+- **One-click updates**: new code on GitHub becomes a new release automatically, and DreamForge
+  shows an **Update** button in the menu bar when one is out. It downloads the new version,
+  checks it, saves your open project and restarts on the new version in place, so shortcuts and
+  launchers keep working. View > Check for updates does the same on demand.
 - **Export**: MP4 and WebM video with sound, animated GIF, PNG sequence, sprite sheet, plus
   character files (`.dfrig`) for reuse.
 
@@ -69,6 +75,18 @@ npm run dist:win     # single portable Windows .exe in release/
 npm run check        # typecheck + lint + unit tests
 npm run e2e          # browser scenarios (needs `npm run dev` running; see e2e/run.cjs)
 ```
+
+## Releases and updates
+
+Every push to the default branch runs the *Windows build* workflow: it typechecks, lints and tests
+the code, builds `DreamForge.exe`, and publishes it as a GitHub release numbered from the major and
+minor version in `package.json` plus the build number (for example `0.2.37`). Nothing is published
+if a check fails. To start a new major or minor series, change the version in `package.json`.
+
+The Windows app checks for a newer release each time it starts. Update now downloads the new
+`.exe` next to the running one, confirms its size and SHA-256 checksum against what GitHub reports,
+then closes DreamForge, replaces the file and opens it again. If DreamForge sits in a folder it may
+not write to (such as Program Files), it offers the download link instead.
 
 Video export uses the browser's WebCodecs encoder, which is available in Chromium-based browsers
 and in the desktop app.

@@ -24,7 +24,7 @@ import { traceImage } from '../core/trace';
 import { SOLID_SHAPES, type SolidShape } from '../core/types';
 import { modelJoints, preloadModels } from '../render/models';
 import { useSettings } from '../state/settings';
-import { ASSET_KINDS, ASSET_STYLES, generateAssets } from './assetBuilder';
+import { ASSET_KINDS, ASSET_STYLES, MAX_REFERENCES, REFERENCE_USES, generateAssets } from './assetBuilder';
 import { addLesson, useMemory } from './memory';
 import { doc, project } from '../state/store';
 import { ui, useUI } from '../state/ui';
@@ -796,24 +796,36 @@ export function registerAllTools(): void {
 
   registerTool({
     name: 'generate_asset',
-    description: `Draws artwork with the user's OpenAI image key and adds it to the scene. It takes up to a minute and costs the user money, so use it when art is asked for or clearly needed. kind: ${ASSET_KINDS.map((k) => k.id).join(', ')}. style: ${ASSET_STYLES.map((k) => k.id).join(', ')}. A background fills the stage behind everything; other kinds are cut out on transparency. as3d makes the result a 3D object.`,
+    description: `Draws artwork with the user's OpenAI image key and adds it to the scene. It takes up to a minute and costs the user money, so use it when art is asked for or clearly needed. kind: ${ASSET_KINDS.map((k) => k.id).join(', ')}. style: ${ASSET_STYLES.map((k) => k.id).join(', ')}. A background fills the stage behind everything; other kinds are cut out on transparency. as3d makes the result a 3D object. references: up to ${MAX_REFERENCES} image assets from list_assets (id or name) for the drawing to follow, which is far more accurate than words when the art must match something that already exists; reference_use says whether to copy their subject and look (both, the default), only their subject (subject) or only their art style (style). With references and reference_use both or subject, description may just list the changes wanted.`,
     parameters: {
       type: 'object',
       properties: {
         description: { type: 'string', description: 'What to draw, in detail.' },
         kind: { type: 'string', enum: ASSET_KINDS.map((k) => k.id) }, style: { type: 'string', enum: ASSET_STYLES.map((k) => k.id) },
         as3d: { type: 'boolean' }, name: { type: 'string' }, x: { type: 'number' }, y: { type: 'number' },
+        references: { type: 'array', items: { type: 'string' }, description: 'Image asset ids or names from list_assets.' },
+        reference_use: { type: 'string', enum: REFERENCE_USES.map((u) => u.id) },
       },
       required: ['description', 'kind'],
     },
     mutates: true,
-    summarize: (a) => `Draw ${a.kind}: ${String(a.description).slice(0, 40)}`,
+    summarize: (a) => `Draw ${a.kind}${a.references?.length ? ` from ${a.references.length} reference${a.references.length === 1 ? '' : 's'}` : ''}: ${String(a.description).slice(0, 40)}`,
     run: async (a) => {
       const kind = ASSET_KINDS.find((k) => k.id === a.kind)!;
       const solid = !!a.as3d && kind.transparent;
+      const assets = Object.values(project().assets);
+      const references = ((a.references ?? []) as string[]).slice(0, MAX_REFERENCES).map((ref) => {
+        const found = project().assets[ref] ?? assets.find((x) => x.name === ref || x.name.replace(/\.[a-z0-9]+$/i, '') === ref);
+        if (!found) throw new Error(`No asset matches "${ref}". Call list_assets.`);
+        if (found.kind !== 'image' || !found.dataUrl) throw new Error(`${found.name} is not an image, so it cannot be a reference.`);
+        return found.dataUrl;
+      });
       let url = '';
-      await generateAssets({ description: a.description, kind: kind.id, style: a.style ?? 'flat', shape: kind.shape, quality: 'high', transparent: kind.transparent, count: 1, model: useSettings.getState().imageModel }, (u) => (url = u));
-      const name = a.name ?? String(a.description).split(/\s+/).slice(0, 4).join(' ');
+      await generateAssets({
+        description: a.description ?? '', kind: kind.id, style: a.style ?? 'flat', shape: kind.shape, quality: 'high', transparent: kind.transparent, count: 1,
+        model: useSettings.getState().imageModel, references, referenceUse: a.reference_use,
+      }, (u) => (url = u));
+      const name = a.name ?? (String(a.description ?? '').trim().split(/\s+/).slice(0, 4).join(' ') || kind.label);
       const p = project();
       const at = a.x !== undefined || a.y !== undefined ? { x: a.x ?? p.width / 2, y: a.y ?? p.height / 2 } : undefined;
       if (solid) return { id: addReliefModel(name, url, {}, at), kind: '3D object' };

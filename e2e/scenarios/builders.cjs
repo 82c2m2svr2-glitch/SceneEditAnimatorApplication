@@ -92,6 +92,29 @@ module.exports = async (page) => {
   });
   assert.deepStrictEqual(bg, { covers: true, atBack: true });
 
+  // A reference image from the project goes to the edit endpoint, and no description is needed.
+  const edits = [];
+  await page.route('https://api.openai.com/v1/images/edits', (r) => {
+    edits.push(r.request().postDataBuffer().toString('latin1'));
+    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [{ b64_json: png }] }) });
+  });
+  await page.keyboard.press('Alt+a');
+  await dialog.locator('select').first().selectOption('prop');
+  await dialog.locator('select', { has: page.locator('option', { hasText: 'From this project' }) }).selectOption({ index: 1 });
+  await dialog.locator('.asset-ref').first().waitFor();
+  await dialog.getByRole('button', { name: '1', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Generate', exact: true }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.asset-pick').length === 1, null, { timeout: 15000 });
+  assert.strictEqual(edits.length, 1);
+  assert.strictEqual(requests.length, 4);
+  assert.match(edits[0], /name="image\[\]"; filename="reference-1\.png"/);
+  assert.match(edits[0], /Reproduce it faithfully/);
+  // A result can be fed back in as a second reference.
+  await page.locator('.asset-pick').first().hover();
+  await dialog.getByRole('button', { name: /Use as reference/ }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.asset-ref').length === 2);
+  await dialog.locator('.dialog-foot').getByRole('button', { name: 'Close', exact: true }).click();
+
   // --- update check ----------------------------------------------------------------------------------
   await page.unroute('https://api.github.com/**');
   await page.route('https://api.github.com/**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ tag_name: 'v99.0.0', html_url: 'https://github.com/example/releases/tag/v99.0.0', body: 'Shiny new things', assets: [{ name: 'DreamForge-99.0.0-windows.exe', browser_download_url: 'https://github.com/example/DreamForge-99.0.0-windows.exe' }] }) }));
