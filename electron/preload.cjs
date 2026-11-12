@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('dreamforge', {
   secretsAvailable: () => ipcRenderer.invoke('dreamforge:secrets-available'),
   getSecret: (name) => ipcRenderer.invoke('dreamforge:get-secret', name),
   setSecret: (name, value) => ipcRenderer.invoke('dreamforge:set-secret', name, value),
+  localGen: (req) => ipcRenderer.invoke('dreamforge:local-gen', req),
   canSelfUpdate: () => ipcRenderer.invoke('dreamforge:can-self-update'),
   installUpdate: (opts) => ipcRenderer.invoke('dreamforge:install-update', opts),
   onUpdateProgress: (fn) => {

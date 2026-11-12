@@ -61,7 +61,7 @@ ipcMain.handle('dreamforge:save-file', async (_event, opts) => {
 
 // --- API keys in the OS credential store ---------------------------------------------------------
 
-const SECRET_NAMES = new Set(['openaiKey', 'anthropicKey']);
+const SECRET_NAMES = new Set(['openaiKey', 'anthropicKey', 'localGenAuth']);
 const secretsFile = () => path.join(app.getPath('userData'), 'secrets.json');
 
 async function readSecrets() {
@@ -91,6 +91,47 @@ ipcMain.handle('dreamforge:set-secret', async (_event, name, value) => {
   if (value) all[name] = safeStorage.encryptString(value).toString('base64');
   else delete all[name];
   await fs.writeFile(secretsFile(), JSON.stringify(all), { mode: 0o600 });
+});
+
+// --- local image generator (SD.Next on this computer) --------------------------------------------
+//
+// The page asks this process to make the request, so the generator needs no CORS opening and can
+// stay bound to 127.0.0.1. Only loopback addresses and the few API routes DreamForge uses are
+// allowed, so this cannot be used to reach anything else.
+
+const LOCAL_GEN_ROUTES = /^\/sdapi\/v1\/(version|platform|options|sd-models|samplers|progress|interrupt|txt2img|img2img|checkpoint|reload-checkpoint|refresh-checkpoints)(\?[\w=&.%-]*)?$/;
+const isLoopback = (host) => {
+  const h = String(host).toLowerCase().replace(/^\[|\]$/g, '');
+  return h === 'localhost' || h === '::1' || /^127(\.\d{1,3}){3}$/.test(h);
+};
+
+ipcMain.handle('dreamforge:local-gen', async (_event, req) => {
+  let base;
+  try {
+    base = new URL(String(req && req.base));
+  } catch {
+    return { ok: false, status: 0, error: 'The generator address is not valid.' };
+  }
+  if (!/^https?:$/.test(base.protocol) || !isLoopback(base.hostname)) return { ok: false, status: 0, error: 'Only a generator on this computer can be used.' };
+  const route = String(req.path || '');
+  if (!LOCAL_GEN_ROUTES.test(route)) return { ok: false, status: 0, error: 'That generator request is not allowed.' };
+  const method = req.method === 'POST' ? 'POST' : 'GET';
+  const headers = { Accept: 'application/json' };
+  if (typeof req.body === 'string') headers['Content-Type'] = 'application/json';
+  if (typeof req.auth === 'string' && req.auth.includes(':')) headers.Authorization = `Basic ${Buffer.from(req.auth, 'utf8').toString('base64')}`;
+  // The first image after a model or size change waits for OpenVINO to compile, which can take minutes.
+  const timeoutMs = Math.min(Math.max(Number(req.timeoutMs) || 15000, 1000), 30 * 60 * 1000);
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const res = await net.fetch(`${base.origin}${base.pathname.replace(/\/+$/, '')}${route}`, { method, headers, body: typeof req.body === 'string' ? req.body : undefined, signal: ac.signal, cache: 'no-store' });
+    return { ok: res.ok, status: res.status, text: await res.text() };
+  } catch (err) {
+    const timedOut = ac.signal.aborted;
+    return { ok: false, status: 0, error: timedOut ? 'The generator did not answer in time.' : `Could not reach the generator at ${base.origin}. Is SD.Next running? (${err instanceof Error ? err.message : err})` };
+  } finally {
+    clearTimeout(timer);
+  }
 });
 
 // --- self-update ---------------------------------------------------------------------------------

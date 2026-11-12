@@ -29,6 +29,14 @@ One TypeScript codebase runs in the browser and as an installable desktop app.
   images** (upload, drag in, paste, or pick one already in the project) and choose whether the
   result should match their subject, their style or both; any result can be fed back as a
   reference to refine it. The AI director can pass project images as references too.
+- **Local Image Generation** (Alt+G): free, on-device Stable Diffusion through SD.Next on your own
+  computer, with no API key and nothing sent anywhere. Text to image for new shot concepts, image to
+  image for variations of a project image with a denoising-strength slider, and region edits that
+  change only part of a background. Every result is saved with its prompt, style, checkpoint,
+  seed, size and settings, so it can be reproduced or used as the start of another shot. Reusable
+  style presets (default: a hand-drawn 1990s cel-anime look) travel with the project, and
+  **background plates** put one finished background behind every shot from the same camera angle,
+  locked and unchanged. See [Local image generation](#local-image-generation).
 - **AI director and assistant** that operates the app through the same commands as the interface
   and has a tool for every part of it: it stages scenes, poses and animates 2D and 3D
   characters, turns joints in depth, moves the camera, lip-syncs, generates and traces art, and
@@ -75,6 +83,65 @@ npm run dist:win     # single portable Windows .exe in release/
 npm run check        # typecheck + lint + unit tests
 npm run e2e          # browser scenarios (needs `npm run dev` running; see e2e/run.cjs)
 ```
+
+## Local image generation
+
+DreamForge drives [SD.Next](https://github.com/vladmandic/sdnext) running on the same computer.
+On an Intel laptop (Core Ultra with integrated graphics) it runs through OpenVINO on the
+integrated GPU. The default checkpoint is a lightweight SD 1.5 anime model, Anything V3 fp16
+(about 2.1 GB).
+
+### One-time setup on Windows
+
+1. Install [Git for Windows](https://git-scm.com/download/win) and [Python 3.12](https://www.python.org/downloads/windows/)
+   (tick "Add python.exe to PATH"). SD.Next supports Python 3.10 to 3.13.
+2. Update the Intel graphics driver (Intel Driver & Support Assistant).
+3. In `local-generator\windows`, run:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File install-sdnext.ps1
+   ```
+
+   It clones SD.Next into `%USERPROFILE%\sdnext` and downloads the checkpoint into
+   `models\Stable-diffusion`. To use another SD 1.5 checkpoint, put its `.safetensors` file there.
+
+### Every time
+
+1. Double-click `local-generator\windows\start-sdnext.bat` and wait for the console to show
+   "Startup time" (the first start installs OpenVINO and takes a while).
+2. In DreamForge press **Alt+G** (or Insert > Local Image Generation). It checks the connection by
+   itself; **Use recommended settings** sets OpenVINO to the integrated GPU and keeps compiled
+   models on disk.
+
+The first image after starting, or after changing the model or the size, waits for OpenVINO to
+compile the model (several minutes). Later images at the same size are much faster, which is
+why previews stay at 512×288.
+
+### Using it
+
+- **New shot**: text to image from a description. The style preset is added to every prompt.
+- **Variation**: image to image from any project image. Denoising strength 0.2 to 0.35 keeps the
+  composition; 0.6 and up mostly redraws.
+- **Region of a plate**: changes only a region (left, middle or right third, lower half, lower
+  left, lower right) for characters and foreground. The result is saved cropped to that region and
+  placed as its own layer exactly over the plate, which stays untouched.
+- **Background plates**: mark an image as the plate for a camera angle, then add it to this scene
+  or every scene. It is placed far back (depth 600), scaled to fill the frame from the scene's
+  camera, and locked.
+- **Reuse settings** on a result, or the circular arrow on a generated image in the Assets panel,
+  fills in the exact prompt, style, seed, size, model and source again.
+
+### Privacy
+
+`start-sdnext.bat` starts SD.Next without `--listen`, so it answers only on 127.0.0.1, and in
+API-only mode. The desktop app sends requests from its own process and accepts only loopback
+addresses and the few API routes it uses, so SD.Next needs no CORS opening. The browser version
+(`npm run dev`) calls SD.Next directly, so start it with `start-sdnext.bat --browser`, which allows
+exactly `http://localhost:5173`. If DreamForge is ever hosted on a website, keep SD.Next on
+127.0.0.1, allow only that site's exact origin with `--cors-origins`, and expect Chrome to ask the
+user for permission before a public site may reach localhost. If SD.Next is started with
+`--auth user:password`, enter the same `user:password` in the dialog; the desktop app keeps it in
+the operating system's credential store. Never add `--listen` or `--share`.
 
 ## Releases and updates
 

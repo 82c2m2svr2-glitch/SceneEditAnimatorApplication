@@ -11,6 +11,7 @@
  * - Time: frames (may be fractional during playback/export sampling).
  * - Depth: 0 is the focal plane; positive is further from the camera, negative is closer.
  */
+import type { GenerationRecord, PlateInfo, StylePreset } from './localGen';
 
 export type ID = string;
 
@@ -37,6 +38,8 @@ export interface Project {
   assets: Record<ID, Asset>;
   /** Reusable animation clips (walk cycles, poses, gestures). */
   actions: Record<ID, ActionClip>;
+  /** Visual style presets for local image generation, saved with the project so every location shares them. */
+  styles?: StylePreset[];
   createdAt: number;
   modifiedAt: number;
 }
@@ -66,6 +69,10 @@ export interface Asset {
   solid?: { shape: SolidShape; color: string };
   /** 3D characters: the turnaround the model is generated from (a CharacterSpec). */
   spec?: unknown;
+  /** Images made by local generation: every setting needed to reproduce it. */
+  generation?: GenerationRecord;
+  /** Set when this image is the fixed background for a camera angle, reused unchanged across shots. */
+  plate?: PlateInfo;
 }
 
 export const SOLID_SHAPES = ['box', 'sphere', 'cylinder', 'cone', 'torus', 'capsule'] as const;

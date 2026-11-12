@@ -1,4 +1,4 @@
-import { Box, FileAudio, ImagePlus, Music, Plus, Save, Sparkles, Trash2, Undo2 } from 'lucide-react';
+import { Box, FileAudio, ImagePlus, Music, Plus, RotateCcw, Save, Sparkles, Trash2, Undo2, Wand2 } from 'lucide-react';
 import { useState } from 'react';
 import { importAudio, placeAudio } from '../audio/engine';
 import { actionFitsView } from '../core/character/actions';
@@ -10,6 +10,8 @@ import { pickFile } from '../state/persistence';
 import { doc, useDocRevision } from '../state/store';
 import { ui, useUI } from '../state/ui';
 import { VIEW_LABEL } from './Properties';
+import { openLocalGen } from './LocalGenDialog';
+import { describeRecord, settingsFromRecord } from '../core/localGen';
 
 export async function importImagesDialog(): Promise<void> {
   const files = await pickFile('image/png,image/jpeg,image/webp,image/gif,image/svg+xml', true);
@@ -52,13 +54,18 @@ export function AssetsPanel() {
       </div>
       <div style={{ padding: '0 8px 8px' }}>
         <button className="btn" style={{ width: '100%' }} title="Generate backgrounds, props, scenery and textures with your OpenAI key" onClick={() => ui().set({ dialog: 'assetBuilder' })}><Sparkles size={14} /> Asset Builder (AI)</button>
+        <button className="btn" style={{ width: '100%', marginTop: 6 }} title="Generate on this computer with SD.Next: no API key, nothing leaves the machine" onClick={() => openLocalGen()}><Wand2 size={14} /> Local Image Generation</button>
       </div>
       {assets.length === 0 && <div className="empty">Imported images, sounds and 3D models appear here. Click one to place it in the scene at the playhead.</div>}
       <div className="asset-grid">
         {assets.map((a) => (
-          <div key={a.id} className="asset" title={`${a.name}\nClick to add to the scene`} onClick={() => (a.kind === 'image' ? placeImage(a) : a.kind === 'audio' ? placeAudio(a) : a.kind === 'model' ? placeModel(a) : ui().toast('This 3D body belongs to its character. Duplicate the character to make another.', 'info'))}>
+          <div key={a.id} className="asset" title={`${a.name}${a.plate ? `\nBackground plate: ${a.plate.angle}` : ''}${a.generation ? `\n${describeRecord(a.generation)}\n${a.generation.fullPrompt}` : ''}\nClick to add to the scene`} onClick={() => (a.kind === 'image' ? placeImage(a) : a.kind === 'audio' ? placeAudio(a) : a.kind === 'model' ? placeModel(a) : ui().toast('This 3D body belongs to its character. Duplicate the character to make another.', 'info'))}>
             {a.kind === 'image' ? <img src={a.dataUrl} alt="" draggable={false} /> : <div className="audio-ico">{a.kind === 'audio' ? <Music size={22} /> : <Box size={22} />}</div>}
             <small>{a.name}</small>
+            {(a.plate || a.generation) && <span className="asset-badge">{a.plate ? 'Plate' : 'SD'}</span>}
+            {a.generation && (
+              <button className="icon-btn sm asset-reuse" title="Generate again from these settings" onClick={(e) => { e.stopPropagation(); openLocalGen({ settings: settingsFromRecord(a.generation!), sourceId: a.generation!.source?.assetId, checkpoint: a.generation!.checkpoint }); }}><RotateCcw size={11} /></button>
+            )}
             <button className="icon-btn sm del" title="Delete asset" onClick={(e) => { e.stopPropagation(); removeAsset(a.id); }}><Trash2 size={11} /></button>
           </div>
         ))}

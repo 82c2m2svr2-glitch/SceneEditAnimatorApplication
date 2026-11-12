@@ -15,11 +15,16 @@ export interface Settings {
   visionModel: string;
   /** 'auto' acts immediately (undoable); 'ask' shows the planned changes and waits for approval. */
   aiMode: 'auto' | 'ask';
+  /** Address of the local image generator (SD.Next) on this computer. */
+  localGenUrl: string;
+  /** "user:password" when the local generator was started with --auth; empty otherwise. */
+  localGenAuth: string;
 }
 
 const DEFAULTS: Settings = {
   openaiKey: '', anthropicKey: '', assistantProvider: 'openai', openaiModel: 'gpt-6-astra',
   anthropicModel: 'claude-opus-5-5', imageModel: 'gpt-image-2.5-sunburst', visionModel: 'gpt-6-astra', aiMode: 'auto',
+  localGenUrl: 'http://127.0.0.1:7860', localGenAuth: '',
 };
 
 const STORAGE = 'dreamforge.settings';
@@ -27,7 +32,7 @@ const STORAGE = 'dreamforge.settings';
 let secureStore = false;
 
 export const usingSecureStore = (): boolean => secureStore;
-const SECRET_FIELDS = ['openaiKey', 'anthropicKey'] as const;
+const SECRET_FIELDS = ['openaiKey', 'anthropicKey', 'localGenAuth'] as const;
 
 function load(): Settings {
   try {

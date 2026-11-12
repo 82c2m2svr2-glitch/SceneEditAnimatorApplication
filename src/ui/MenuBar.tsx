@@ -119,6 +119,7 @@ export function MenuBar() {
             <MenuItem label="Sample 3D character (same rig, drawn cel-shaded)" onClick={() => { close(); insertSampleCharacter(true); }} />
             <MenuItem label="Character Creator (AI)…" onClick={() => { close(); set({ dialog: 'characterCreator' }); }} />
             <MenuItem label="Asset Builder (AI)…" onClick={() => { close(); set({ dialog: 'assetBuilder' }); }} />
+            <MenuItem label="Local Image Generation (on this computer)…" kbd="Alt+G" onClick={() => { close(); set({ dialog: 'localGen' }); }} />
             <div className="menu-sep" />
             <MenuItem label="Rectangle" onClick={() => { close(); insert(() => createRect('Rectangle', 300, 200, ui().fill ?? '#7c5cff')); }} />
             <MenuItem label="Ellipse" onClick={() => { close(); insert(() => createShape('Ellipse', ellipsePath(0, 0, 150, 150), { fill: ui().fill })); }} />
