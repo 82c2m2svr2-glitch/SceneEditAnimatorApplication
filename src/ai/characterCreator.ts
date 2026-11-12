@@ -6,7 +6,7 @@
  *   4. hand the spec to buildCharacter, which rigs it.
  * Steps 1-3 call the OpenAI API with the user's own key.
  */
-import { BONE_NAMES, JOINT_NAMES, type BoneName, type CharacterSpec, type JointName, type PartPath, type ViewSpec } from '../core/character/spec';
+import { BONE_NAMES, CORE_JOINT_NAMES, type BoneName, type CharacterSpec, type CoreJointName, type PartPath, type ViewSpec } from '../core/character/spec';
 import { parseSvgPath } from '../core/path';
 import { VIEW_NAMES, type ViewName } from '../core/types';
 import { settings } from '../state/settings';
@@ -52,9 +52,10 @@ function dataUrlToBlob(url: string): Blob {
   return new Blob([bytes], { type: m[1] });
 }
 
-async function post(path: string, body: BodyInit, json: boolean, signal?: AbortSignal): Promise<any> {
+/** Sends one authenticated request to the OpenAI API with the user's own key. */
+export async function post(path: string, body: BodyInit, json: boolean, signal?: AbortSignal): Promise<any> {
   const key = settings().openaiKey;
-  if (!key) throw new AssistantError('Add your OpenAI API key in Settings to use Character Creator.');
+  if (!key) throw new AssistantError('Add your OpenAI API key in Settings first.');
   let res: Response;
   try {
     res = await fetch(`https://api.openai.com/v1/${path}`, {
@@ -131,7 +132,7 @@ const PATH = {
 const VIEW_SCHEMA = {
   type: 'object',
   properties: {
-    joints: { type: 'object', properties: Object.fromEntries(JOINT_NAMES.map((j) => [j, POINT])), required: [...JOINT_NAMES], additionalProperties: false },
+    joints: { type: 'object', properties: Object.fromEntries(CORE_JOINT_NAMES.map((j) => [j, POINT])), required: [...CORE_JOINT_NAMES], additionalProperties: false },
     parts: {
       type: 'array',
       items: {
@@ -170,7 +171,8 @@ Return:
    Landmarks hidden behind the body in this view still need a plausible position.
 
 2. parts: the artwork redrawn as separate vector parts, each attached to one bone. Bones: ${BONE_NAMES.filter((b) => b !== 'root').join(', ')}.
-   - Make at least one part per bone that is visible: pelvis on hips, torso on torso, neck on neck, head on head, and upper arm, lower arm, hand, upper leg, lower leg and foot (shoe) on their bones. Hair, ears, hats and anything worn on the head attach to head. Clothing follows the body part it covers.
+   - Make at least one part per main bone that is visible: pelvis on hips, belly on torso, ribcage and shoulders on chest, neck on neck, head on head, and upper arm, lower arm, hand (palm), upper leg, lower leg and foot (shoe) on their bones. Ears, hats and short hair attach to head; long hair, ponytails and anything that should swing attach to hair. Clothing follows the body part it covers.
+   - Finer bones are optional and only worth using when the drawing shows that detail clearly: fingers (the four fingers as one mitten shape) and thumb on a large hand, toes (the front of the shoe). The clavicle bones carry no artwork. When unsure, use the main bone.
    - Draw every part COMPLETE, as if its neighbours were removed: extend each limb segment past the joint with a rounded end so that neighbouring parts overlap generously. When a limb rotates, no gap may open.
    - Follow the drawing's silhouette, proportions and colours closely. Use smooth cubic curves (C commands). Keep each path under about 24 segments.
    - A part can have several paths (base colour first, then details on top). Use the drawing's outline colour and width as stroke where it has outlines.
@@ -199,8 +201,8 @@ function toPaths(raw: any[]): PartPath[] {
 
 /** Turns the model's JSON for one view into a ViewSpec, validating everything the rig depends on. */
 export function viewFromResponse(raw: any, view: ViewName): ViewSpec {
-  const joints = {} as Record<JointName, [number, number]>;
-  for (const j of JOINT_NAMES) {
+  const joints = {} as Record<CoreJointName, [number, number]>;
+  for (const j of CORE_JOINT_NAMES) {
     const p = raw?.joints?.[j];
     if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) throw new AssistantError(`The conversion for the ${view} view is missing the "${j}" landmark.`);
     joints[j] = [p.x, p.y];

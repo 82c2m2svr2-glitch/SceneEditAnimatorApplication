@@ -5,7 +5,7 @@ export type ToolId =
   | 'select' | 'node' | 'hand' | 'zoom' | 'bone' | 'ik' | 'weights' | 'pen' | 'rect' | 'ellipse' | 'polygon'
   | 'star' | 'line' | 'brush' | 'eraser' | 'fill' | 'text' | 'camera';
 
-export type DialogId = 'export' | 'settings' | 'characterCreator' | 'newProject' | 'shortcuts' | 'actionSave' | 'trace' | null;
+export type DialogId = 'export' | 'settings' | 'characterCreator' | 'newProject' | 'shortcuts' | 'actionSave' | 'trace' | 'update' | 'assetBuilder' | null;
 
 export interface KeyRef {
   target: ID;
@@ -59,6 +59,8 @@ export interface UIState {
   bottomPanel: 'timeline' | 'graph';
   rightTab: 'properties' | 'assets' | 'actions' | 'history';
   showChat: boolean;
+  /** Full-screen editing: only the stage, the tools and a small playback bar are shown. */
+  fullscreen: boolean;
   dialog: DialogId;
   toasts: Toast[];
   /** Bumped to force a viewport repaint for things outside the document (image decode, fonts). */
@@ -107,6 +109,7 @@ export const useUI = create<UIState>((set, get) => ({
   bottomPanel: 'timeline',
   rightTab: 'properties',
   showChat: true,
+  fullscreen: false,
   dialog: null,
   toasts: [],
   repaint: 0,
@@ -133,4 +136,20 @@ export const ui = (): UIState => useUI.getState();
 
 export function requestRepaint(): void {
   useUI.setState({ repaint: useUI.getState().repaint + 1 });
+}
+
+/** Enters or leaves full-screen editing. The browser's own full-screen mode follows where it is allowed. */
+export function toggleFullscreen(on = !useUI.getState().fullscreen): void {
+  useUI.setState({ fullscreen: on });
+  try {
+    if (on && !document.fullscreenElement) void document.documentElement.requestFullscreen?.().catch(() => {});
+    else if (!on && document.fullscreenElement) void document.exitFullscreen?.().catch(() => {});
+  } catch {}
+}
+
+if (typeof document !== 'undefined') {
+  // Leaving the browser's full-screen mode with Esc also restores the panels.
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement && useUI.getState().fullscreen) useUI.setState({ fullscreen: false });
+  });
 }

@@ -37,6 +37,7 @@ export function contentBounds(en: EvalNode, frame: number): Rect | null {
       return { x: b.x - pad, y: b.y - pad, w: b.w + pad * 2, h: b.h + pad * 2 };
     }
     case 'image':
+    case 'model3d':
       return { x: -n.width / 2, y: -n.height / 2, w: n.width, h: n.height };
     case 'text':
       return textBounds(n, en);

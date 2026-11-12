@@ -31,6 +31,8 @@ const names = fs.readdirSync(dir).filter((f) => f.endsWith('.cjs')).map((f) => f
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+    // The app's daily update check must not leave the machine during tests; scenarios may override this.
+    await page.route('https://api.github.com/**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ tag_name: 'v0.0.1', assets: [] }) }));
     try {
       await page.goto(BASE);
       await page.waitForSelector('.start');

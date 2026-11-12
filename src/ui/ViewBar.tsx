@@ -1,5 +1,5 @@
-import { Bone, Frame, Grid3x3, Layers, Maximize } from 'lucide-react';
-import { useUI } from '../state/ui';
+import { Bone, Expand, Frame, Grid3x3, Layers, Maximize } from 'lucide-react';
+import { toggleFullscreen, useUI } from '../state/ui';
 import { ToolOptions } from './Toolbar';
 import { fitView } from './Viewport';
 import { NumberField } from './widgets';
@@ -32,6 +32,7 @@ export function ViewBar() {
       <div className="spacer" />
       <span className="chip">{Math.round(u.zoom * 100)}%</span>
       <button className="icon-btn" title="Fit stage in view (F)" onClick={() => fitView()}><Maximize size={15} /></button>
+      <button className={`icon-btn${u.fullscreen ? ' on' : ''}`} title="Full-screen editing: hide the panels and work on the stage alone (Shift+F or F11)" onClick={() => toggleFullscreen()}><Expand size={15} /></button>
     </div>
   );
 }

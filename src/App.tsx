@@ -2,15 +2,20 @@ import { useEffect, useRef, useState } from 'react';
 import { getEval } from './core/anim';
 import { renderFrame } from './render/draw';
 import { importAudio } from './audio/engine';
-import { importImage, importRig, placeImage, readAsDataUrl } from './state/content';
+import { importImage, importModel, importRig, isModelFile, placeImage, placeModel, readAsDataUrl } from './state/content';
 import { openProjectFile, saveToLibrary } from './state/persistence';
-import { doc } from './state/store';
-import { ui, useUI } from './state/ui';
+import { keyNodes, scene as currentScene, setFrame } from './state/commands';
+import { togglePlay } from './state/playback';
+import { doc, useDocRevision } from './state/store';
+import { toggleFullscreen, ui, useUI } from './state/ui';
 import { loadNativeSecrets } from './state/settings';
 import { CharacterCreator } from './ui/CharacterCreator';
 import { ChatPanel } from './ui/ChatPanel';
 import { ExportDialog } from './ui/ExportDialog';
 import { TraceDialog } from './ui/TraceDialog';
+import { AssetBuilder } from './ui/AssetBuilder';
+import { UpdateDialog } from './ui/UpdateDialog';
+import { dailyUpdateCheck } from './state/updates';
 import { GraphEditor } from './ui/GraphEditor';
 import { LeftPanel } from './ui/LeftPanel';
 import { MenuBar } from './ui/MenuBar';
@@ -51,6 +56,7 @@ async function handleDrop(files: File[]): Promise<void> {
       else if (name.endsWith('.dfrig')) importRig(JSON.parse(await f.text()));
       else if (f.type.startsWith('image/')) placeImage(await importImage(f.name, await readAsDataUrl(f), f.type));
       else if (f.type.startsWith('audio/')) await importAudio(f);
+      else if (isModelFile(f.name)) placeModel(await importModel(f));
       else ui().toast(`"${f.name}" is not a file DreamForge can import.`, 'error');
     } catch (err) {
       ui().toast(err instanceof Error ? err.message : `Could not import "${f.name}".`, 'error');
@@ -63,6 +69,7 @@ function Editor() {
   const bottomPanel = useUI((s) => s.bottomPanel);
   const set = useUI((s) => s.set);
   const showChat = useUI((s) => s.showChat);
+  const full = useUI((s) => s.fullscreen);
   const [bottomH, setBottomH] = useState(250);
   const drag = useRef<{ y: number; h: number } | null>(null);
 
@@ -86,9 +93,9 @@ function Editor() {
 
   return (
     <>
-      <MenuBar />
+      {!full && <MenuBar />}
       <div
-        className="editor"
+        className={`editor${full ? ' full' : ''}`}
         onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
         onDrop={(e) => {
           if (!e.dataTransfer.files.length) return;
@@ -97,12 +104,13 @@ function Editor() {
         }}
       >
         <Toolbar />
-        <LeftPanel />
+        {!full && <LeftPanel />}
         <div className="center">
           <ViewBar />
           <Viewport />
+          {full && <FullscreenBar />}
         </div>
-        <div className="panel right">
+        <div className="panel right" style={full ? { display: 'none' } : undefined}>
           <div className="tabs">
             {(['properties', 'actions', 'assets', 'history'] as const).map((t) => (
               <button key={t} className={`tab${rightTab === t ? ' on' : ''}`} onClick={() => set({ rightTab: t })}>
@@ -117,7 +125,7 @@ function Editor() {
             {rightTab === 'history' && <HistoryPanel />}
           </div>
         </div>
-        <div className="bottom" style={{ height: bottomH }}>
+        <div className="bottom" style={full ? { display: 'none' } : { height: bottomH }}>
           <div
             className="resizer"
             onPointerDown={(e) => {
@@ -133,9 +141,28 @@ function Editor() {
           </div>
           {bottomPanel === 'timeline' ? <Timeline /> : <GraphEditor />}
         </div>
-        {showChat && <ChatPanel />}
+        {showChat && !full && <ChatPanel />}
       </div>
     </>
+  );
+}
+
+/** The few controls full-screen editing needs: scrub, play, key and a way back. */
+function FullscreenBar() {
+  const frame = useUI((s) => s.frame);
+  const playing = useUI((s) => s.playing);
+  const selection = useUI((s) => s.selection);
+  useDocRevision();
+  const duration = currentScene().duration;
+  return (
+    <div className="full-bar">
+      <button className="btn" title="Play / pause (Space)" onClick={() => togglePlay()}>{playing ? 'Pause' : 'Play'}</button>
+      <input type="range" min={0} max={Math.max(1, duration - 1)} value={Math.round(frame)} onChange={(e) => setFrame(Number(e.target.value))} title="Scrub the timeline (arrow keys step one frame)" />
+      <span className="chip" style={{ minWidth: 76, textAlign: 'center' }}>{Math.round(frame)} / {duration - 1}</span>
+      <button className="btn" disabled={!selection.length} title="Insert a keyframe for the selection (K)" onClick={() => keyNodes(selection)}>Key</button>
+      <button className="btn" title="Undo (Ctrl+Z)" disabled={!doc.canUndo} onClick={() => doc.undo()}>Undo</button>
+      <button className="btn primary" title="Leave full screen (Shift+F, F11 or Esc)" onClick={() => toggleFullscreen(false)}>Exit full screen</button>
+    </div>
   );
 }
 
@@ -159,6 +186,8 @@ export function App() {
   const set = useUI((s) => s.set);
   useEffect(() => {
     void loadNativeSecrets();
+    // Once a day, quietly: mention a newer release without interrupting work.
+    void dailyUpdateCheck().then((info) => info && ui().toast(`DreamForge ${info.latest} is available. Open File > Check for updates to download it.`, 'info'));
   }, []);
   return (
     <div className="app">
@@ -167,6 +196,8 @@ export function App() {
       {dialog === 'settings' && <SettingsDialog />}
       {dialog === 'export' && doc.project && <ExportDialog />}
       {dialog === 'trace' && doc.project && <TraceDialog />}
+      {dialog === 'update' && <UpdateDialog />}
+      {dialog === 'assetBuilder' && doc.project && <AssetBuilder />}
       {dialog === 'shortcuts' && (
         <Dialog title="Keyboard shortcuts" onClose={() => set({ dialog: null })}>
           <div className="kbd-list">

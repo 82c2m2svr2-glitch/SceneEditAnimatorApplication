@@ -1,7 +1,7 @@
 import { newId } from './ids';
 import { rectPath } from './path';
 import type {
-  AnimMode, BoneNode, Camera, CharacterNode, DrawingNode, GroupNode, ImageNode, NodeBase, PathData,
+  AnimMode, BoneNode, Camera, CharacterNode, DrawingNode, GroupNode, ImageNode, Model3DNode, NodeBase, PathData,
   Paint, ParticleConfig, ParticlesNode, Project, Scene, ShapeNode, SwitchNode, TextNode, ViewName,
 } from './types';
 
@@ -88,6 +88,14 @@ export function createText(text: string, init: Partial<TextNode> = {}): TextNode
 
 export function createImage(name: string, assetId: string, width: number, height: number, init: Partial<ImageNode> = {}): ImageNode {
   return { ...base(name), type: 'image', assetId, width, height, ...init };
+}
+
+export function createModel3D(name: string, assetId: string, size: number, init: Partial<Model3DNode> = {}): Model3DNode {
+  return {
+    ...base(name), type: 'model3d', assetId, width: size, height: size, rotX: 0, rotY: 0, rotZ: 0,
+    shadeSteps: 2, shade: 0.28, outline: 0.45, outlineColor: '#1b1b22', lightAngle: 35, clip: null, clipSpeed: 1, clipTime: 0,
+    ...init,
+  };
 }
 
 export function createBone(name: string, length: number, init: Partial<BoneNode> = {}): BoneNode {

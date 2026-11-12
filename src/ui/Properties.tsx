@@ -5,6 +5,8 @@ import { VISEMES } from '../core/character/spec';
 import { textToVisemes } from '../core/character/speech';
 import { exposureAt, exposureFrames } from '../core/drawing';
 import { PARTICLE_PRESETS } from '../core/particles';
+import { ancestorOfType } from '../core/tree';
+import { modelClips, modelError, modelJoints } from '../render/models';
 import {
   CAMERA_ID, VIEW_NAMES, type BlendMode, type Effect, type ID, type KeyValue, type ParticleConfig, type Scene,
   type SceneNode, type Transition,
@@ -13,7 +15,7 @@ import {
   currentValue, deleteKeys, isAnimatable, patchConstraint, patchNode, patchProject, patchScene, removeConstraint,
   scene as currentScene, setCamera, setDrawingFrame, setKey, setKeys, setProps, setPropsMany,
 } from '../state/commands';
-import { addIKForBone, bindSkin, makeMesh, unbindSkin } from '../state/content';
+import { addIKForBone, bindSkin, imageTo3D, makeMesh, unbindSkin } from '../state/content';
 import { doc, useDocRevision } from '../state/store';
 import { ui, useUI } from '../state/ui';
 import { ColorField, KeyDot, NumberField, Row, Section, TextField } from './widgets';
@@ -38,7 +40,8 @@ function Num(props: { ids: ID[]; prop: string; label: string; step?: number; min
   const { ids, prop, scale = 1 } = props;
   const id = ids[0];
   const raw = currentValue(id, prop);
-  const v = typeof raw === 'number' ? raw * scale : undefined;
+  // Joint turns have no stored value until they are first set; they read as zero.
+  const v = typeof raw === 'number' ? raw * scale : prop.startsWith('j:') ? 0 : undefined;
   const s = currentScene();
   const frame = useUI((u) => u.frame);
   const node = s.nodes[id];
@@ -98,6 +101,82 @@ function StepSelect(props: { id: ID; prop: string; options: { value: string; lab
 }
 
 // ---------------------------------------------------------------------------------------------
+
+const AXES = [['x', 'Tilt'], ['y', 'Turn'], ['z', 'Roll']] as const;
+
+/** Three keyable angles that turn one joint of a 3D model. */
+function JointTurn({ bodyId, joint }: { bodyId: ID; joint: string }) {
+  return (
+    <div className="grid3">
+      {AXES.map(([axis, label]) => <Num key={axis} ids={[bodyId]} prop={`j:${joint}:${axis}`} label={label} suffix="°" precision={0} />)}
+    </div>
+  );
+}
+
+function Model3DSection({ node }: { node: Extract<SceneNode, { type: 'model3d' }> }) {
+  const asset = doc.project!.assets[node.assetId];
+  const clips = modelClips(asset);
+  const joints = modelJoints(asset);
+  const error = modelError(asset);
+  const [joint, setJoint] = useState('');
+  const current = joints.includes(joint) ? joint : joints[0] ?? '';
+  const ids = [node.id];
+  return (
+    <>
+      <Section title="3D model">
+        {error && <div className="hint" style={{ color: 'var(--danger, #ff6b6b)' }}>{error}</div>}
+        <div className="grid3">
+          <Num ids={ids} prop="rotY" label="Turn" suffix="°" precision={0} />
+          <Num ids={ids} prop="rotX" label="Tilt" suffix="°" precision={0} />
+          <Num ids={ids} prop="rotZ" label="Roll" suffix="°" precision={0} />
+        </div>
+        <NumberField label="Size" value={node.height} min={8} onChange={(v) => patchNode(node.id, { height: v, width: (v * node.width) / node.height }, 'Resize 3D model', 'm3dsize')} />
+        {clips.length > 0 && (
+          <>
+            <Row name="Motion">
+              <select value={node.clip ?? ''} onChange={(e) => patchNode(node.id, { clip: e.target.value || null }, 'Choose motion')}>
+                <option value="">None (rest pose)</option>
+                {clips.map((c) => <option key={c.name} value={c.name}>{c.name} ({c.duration.toFixed(1)}s)</option>)}
+              </select>
+            </Row>
+            {node.clip && (
+              <div className="grid2">
+                <Num ids={ids} prop="clipSpeed" label="Speed" step={0.05} />
+                <Num ids={ids} prop="clipTime" label="Offset" suffix="s" step={0.05} />
+              </div>
+            )}
+          </>
+        )}
+      </Section>
+      <Section title="2D look">
+        <Row name="Shading">
+          <div className="seg">
+            {[[1, 'Flat'], [2, '2 tones'], [3, '3 tones']].map(([n, label]) => (
+              <button key={n} className={node.shadeSteps === n ? 'on' : ''} onClick={() => patchNode(node.id, { shadeSteps: n as number }, 'Shading')}>{label}</button>
+            ))}
+          </div>
+        </Row>
+        <div className="grid2">
+          <Num ids={ids} prop="shade" label="Shadow" min={0} max={1} step={0.02} />
+          <Num ids={ids} prop="lightAngle" label="Light" suffix="°" precision={0} />
+        </div>
+        <Row name="Outline">
+          <Num ids={ids} prop="outline" label="" min={0} max={4} step={0.05} />
+          <Color ids={ids} prop="outlineColor" />
+        </Row>
+      </Section>
+      {joints.length > 0 && (
+        <Section title={`Joints (${joints.length})`}>
+          <select value={current} onChange={(e) => setJoint(e.target.value)}>
+            {joints.map((j) => <option key={j} value={j}>{j}</option>)}
+          </select>
+          <JointTurn bodyId={node.id} joint={current} />
+          <div className="hint">Every joint can be turned and keyed. For a character, select a bone on the stage to pose it; these turns add true 3D motion on top.</div>
+        </Section>
+      )}
+    </>
+  );
+}
 
 function EffectsSection({ node }: { node: SceneNode }) {
   const update = (fx: Effect[]) => patchNode(node.id, { effects: fx }, 'Edit effects', 'effects');
@@ -365,8 +444,25 @@ function NodeProperties({ scene, ids }: { scene: Scene; ids: ID[] }) {
           <Row name="Vector">
             <button className="btn" title="Turn this picture into editable flat-colour vector shapes" onClick={() => ui().set({ dialog: 'trace' })}>Trace to vector shapes…</button>
           </Row>
+          <Row name="3D">
+            <button className="btn" title="Puff this picture up into a rounded 3D object that can turn in depth. Works best on a cut-out of a single object." onClick={() => { if (imageTo3D(node.id)) ui().toast('Turned into a 3D object. Use Turn, Tilt and Roll to rotate it.', 'success'); }}>Make it a 3D object</button>
+          </Row>
         </Section>
       )}
+
+      {sameType && node.type === 'model3d' && ids.length === 1 && <Model3DSection node={node} />}
+
+      {isBone && ids.length === 1 && (() => {
+        // A bone of a 3D character can also turn in depth, which the flat skeleton cannot express.
+        const owner = ancestorOfType(scene, node.id, 'character');
+        const body = owner?.children.map((c) => scene.nodes[c]).find((c) => c?.type === 'model3d');
+        return body ? (
+          <Section title="3D turn">
+            <JointTurn bodyId={body.id} joint={node.name} />
+            <div className="hint">Turns this joint in depth, for example to look left and right or reach toward the viewer.</div>
+          </Section>
+        ) : null;
+      })()}
 
       {sameType && node.type === 'character' && ids.length === 1 && (
         <Section title="Character">

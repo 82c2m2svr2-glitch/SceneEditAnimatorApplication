@@ -118,6 +118,8 @@ interface ResolvedStrip {
   strip: ActionStrip;
   clip: ActionClip;
   tracks: Record<string, Track>;
+  /** This node's tracks in each view-specific version of the clip (empty when that version leaves the node alone). */
+  byView?: Partial<Record<ViewName, Record<string, Track>>>;
 }
 
 const nameIndexCache = new WeakMap<Scene['nodes'], Map<ID, Map<string, ID>>>();
@@ -154,12 +156,19 @@ function resolveStrips(project: Project, scene: Scene): Map<ID, ResolvedStrip[]>
     const clip = project.actions[strip.actionId];
     if (!clip || !scene.nodes[strip.targetId]) continue;
     const idx = nameIndex(scene, strip.targetId);
-    for (const name in clip.tracks) {
+    const names = new Set(Object.keys(clip.tracks));
+    for (const v in clip.viewTracks) for (const name in clip.viewTracks[v as ViewName]) names.add(name);
+    for (const name of names) {
       const id = idx.get(name);
       if (!id) continue;
       let list = out.get(id);
       if (!list) out.set(id, (list = []));
-      list.push({ strip, clip, tracks: clip.tracks[name] });
+      let byView: ResolvedStrip['byView'];
+      if (clip.viewTracks) {
+        byView = {};
+        for (const v in clip.viewTracks) byView[v as ViewName] = clip.viewTracks[v as ViewName]![name] ?? {};
+      }
+      list.push({ strip, clip, tracks: clip.tracks[name] ?? {}, byView });
     }
   }
   return out;
@@ -192,12 +201,15 @@ export function evaluateScene(project: Project, scene: Scene, frame: number, opt
     const tracks = frozen ? undefined : scene.anim[id];
     const myStrips = frozen ? undefined : strips.get(id);
     const props: Record<string, KeyValue> = {};
+    // A clip may have a version per character view; a character picks by its own view, its parts by the view they are in.
+    const stripView = node.type === 'character' ? ((sampleTrack(tracks?.currentView, frame) as ViewName | undefined) ?? node.currentView) : view;
+    const tracksOf = (rs: ResolvedStrip) => (stripView && rs.byView?.[stripView]) || rs.tracks;
 
     const value = (prop: string, base: KeyValue): KeyValue => {
       let v = base;
       if (myStrips) {
         for (const rs of myStrips) {
-          const tr = rs.tracks[prop];
+          const tr = tracksOf(rs)[prop];
           if (!tr) continue;
           const s = stripSample(rs.strip, rs.clip, frame, project.fps);
           if (!s) continue;
@@ -251,7 +263,7 @@ export function evaluateScene(project: Project, scene: Scene, frame: number, opt
       }
     };
     collect(tracks);
-    if (myStrips) for (const rs of myStrips) collect(rs.tracks);
+    if (myStrips) for (const rs of myStrips) collect(tracksOf(rs));
 
     const ownVisible = value('visible', node.visible);
     let visible = parentVisible && ownVisible !== false && ownVisible !== 0;
@@ -375,6 +387,7 @@ export const EXTRA_ANIM_PROPS: Record<string, string[]> = {
   switch: ['active'],
   character: ['currentView', 'mouth', 'eyes'],
   image: [],
+  model3d: ['rotX', 'rotY', 'rotZ', 'clipTime'],
   bone: [],
   group: [],
   drawing: [],

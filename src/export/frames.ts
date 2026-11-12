@@ -3,6 +3,7 @@ import { planSequence } from '../core/sequence';
 import type { Project, Scene } from '../core/types';
 import { renderFrame, type Ctx2D } from '../render/draw';
 import { preloadImages } from '../render/images';
+import { preloadModels } from '../render/models';
 import type { FrameCanvas, FrameSource } from './types';
 
 export interface FrameSourceOptions {
@@ -30,6 +31,7 @@ function makeCanvas(w: number, h: number): { canvas: FrameCanvas; ctx: Ctx2D } {
 /** Builds the frame source every exporter consumes: finished frames, scene transitions included. */
 export async function createFrameSource(project: Project, opts: FrameSourceOptions): Promise<ProjectFrameSource> {
   await preloadImages(project);
+  await preloadModels(project);
   if (document.fonts?.ready) await document.fonts.ready;
   const { width, height } = opts;
   const transparent = !!opts.transparent;

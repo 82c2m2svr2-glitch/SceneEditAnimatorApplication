@@ -1,7 +1,7 @@
 import { shade } from '../color';
 import { pathToSvg, smoothPath } from '../path';
 import { VIEW_NAMES, type ViewName } from '../types';
-import type { CharacterSpec, FaceSpec, JointName, PartPath, PartSpec, ViewSpec } from './spec';
+import type { CharacterSpec, FaceSpec, JointName, PartPath, PartSpec, ViewJoints, ViewSpec } from './spec';
 
 export interface HumanoidParams {
   name: string;
@@ -72,11 +72,11 @@ function buildView(view: ViewName, p: HumanoidParams): ViewSpec {
   const hh = 0.17 * p.headScale;
   const y = {
     ankle: -0.045, knee: -0.26, hip: -0.48, hips: -0.5, waist: -0.6, neck: -0.815, headBase: -0.845,
-    shoulder: -0.79, elbow: -0.625, wrist: -0.475, handTip: -0.41,
+    shoulder: -0.79, elbow: -0.625, wrist: -0.475, handTip: -0.41, chest: -0.7,
   };
   const headTop = y.headBase - hh;
 
-  const joints = {} as Record<JointName, P2>;
+  const joints = {} as ViewJoints & Record<JointName, P2>;
   const J = (name: JointName, x: number, yy: number) => {
     joints[name] = [x, yy * U];
   };
@@ -94,7 +94,15 @@ function buildView(view: ViewName, p: HumanoidParams): ViewSpec {
     J(`knee.${tag}`, X(s, 0.055 * b), y.knee);
     J(`ankle.${tag}`, X(s, 0.055 * b), y.ankle);
     J(`toe.${tag}`, X(s, 0.075 * b, 0.085), 0);
+    J(`collar.${tag}`, X(s, 0.03 * b), -0.8);
+    J(`knuckle.${tag}`, X(s, 0.153 * b), -0.44);
+    J(`thumbBase.${tag}`, X(s, 0.146 * b, 0.014), -0.462);
+    J(`thumbTip.${tag}`, X(s, 0.136 * b, 0.05), -0.428);
+    J(`ball.${tag}`, X(s, 0.068 * b, 0.05), -0.004);
   }
+  J('chest', sin * 3, y.chest);
+  J('hairRoot', sin * 12, headTop + 0.02);
+  J('hairTip', X(1, 0, -0.075), y.headBase + 0.03);
 
   const parts: PartSpec[] = [];
   const armZ = (s: number) => (near(s) > 0.2 ? 22 : near(s) < -0.2 ? -22 : 20);
@@ -106,16 +114,32 @@ function buildView(view: ViewName, p: HumanoidParams): ViewSpec {
   const ww = half(0.092, 0.066);
   const wh = half(0.1, 0.072);
   const chestBulge = sin * 14 * (back ? -1 : 1);
+  // The trunk is two overlapping pieces so the chest can bend and twist over the belly. The chest's
+  // lower outline is covered by an unstroked patch, so no line shows across the shirt.
+  const wc = (ws * 0.98 + ww) / 2;
+  const seam = y.chest * U;
   parts.push({
-    name: 'torso', bone: 'torso', z: 5,
+    name: 'belly', bone: 'torso', z: 4,
     paths: [{
       d: blob([
-        [-ws, y.shoulder * U + 6], [-ws * 0.55, y.neck * U - 4], [ws * 0.55, y.neck * U - 4], [ws, y.shoulder * U + 6],
-        [ws * 0.98 + chestBulge, (y.shoulder + 0.08) * U], [ww, y.waist * U], [ww * 1.02, (y.waist + 0.035) * U],
-        [-ww * 1.02, (y.waist + 0.035) * U], [-ww, y.waist * U], [-ws * 0.98, (y.shoulder + 0.08) * U],
+        [-wc, seam - 46], [wc + chestBulge * 0.5, seam - 46], [ww, y.waist * U], [ww * 1.02, (y.waist + 0.035) * U],
+        [-ww * 1.02, (y.waist + 0.035) * U], [-ww, y.waist * U],
       ], 0.8),
       ...ink(p.shirt),
     }],
+  });
+  parts.push({
+    name: 'chest', bone: 'chest', z: 5,
+    paths: [
+      {
+        d: blob([
+          [-ws, y.shoulder * U + 6], [-ws * 0.55, y.neck * U - 4], [ws * 0.55, y.neck * U - 4], [ws, y.shoulder * U + 6],
+          [ws * 0.98 + chestBulge, (y.shoulder + 0.08) * U], [wc + chestBulge * 0.4, seam + 34], [-wc, seam + 34], [-ws * 0.98, (y.shoulder + 0.08) * U],
+        ], 0.8),
+        ...ink(p.shirt),
+      },
+      { d: ellipse(chestBulge * 0.2, seam + 30, Math.max(8, wc - sw * 1.6), 16), fill: p.shirt },
+    ],
   });
   parts.push({
     name: 'pelvis', bone: 'hips', z: 0,
@@ -148,9 +172,21 @@ function buildView(view: ViewName, p: HumanoidParams): ViewSpec {
       name: `lowerArm.${tag}`, bone: `lowerArm.${tag}`, z: az + 1,
       paths: [{ d: capsule(el, wr, 30 * b, 23 * b), ...ink(p.sleeves === 'long' ? p.shirt : p.skin) }],
     });
+    // Hand: palm, a mitten of four fingers that can curl, and a thumb on the side that faces forward.
+    const kn2 = joints[`knuckle.${tag}`]!;
+    const tb = joints[`thumbBase.${tag}`]!;
+    const tt = joints[`thumbTip.${tag}`]!;
     parts.push({
-      name: `hand.${tag}`, bone: `hand.${tag}`, z: az + 2,
-      paths: [{ d: capsule([wr[0], wr[1] + 6], [ht[0], ht[1] - 18], 25 * b, 27 * b), ...ink(p.skin) }],
+      name: `fingers.${tag}`, bone: `fingers.${tag}`, z: az + 2,
+      paths: [{ d: capsule([kn2[0], kn2[1] - 6], [ht[0], ht[1] - 20], 23 * b, 21 * b), ...ink(p.skin) }],
+    });
+    parts.push({
+      name: `thumb.${tag}`, bone: `thumb.${tag}`, z: az + (back ? 1.5 : 3.5),
+      paths: [{ d: capsule([tb[0], tb[1] - 4], [tt[0], tt[1] - 8], 12 * b, 11 * b), ...ink(p.skin) }],
+    });
+    parts.push({
+      name: `hand.${tag}`, bone: `hand.${tag}`, z: az + 3,
+      paths: [{ d: capsule([wr[0], wr[1] + 6], [kn2[0], kn2[1] + 2], 25 * b, 27 * b), ...ink(p.skin) }],
     });
 
     const hp = joints[`hip.${tag}`];
@@ -163,9 +199,16 @@ function buildView(view: ViewName, p: HumanoidParams): ViewSpec {
     // Shoe: heel sits behind the ankle, toe box in front; both rest on the ground line.
     const heel: P2 = [an[0] - sin * 26, -24];
     const tip: P2 = [toe[0] - sin * 22, -24 - Math.abs(cos) * 6];
+    // The shoe bends at the ball of the foot: heel and arch on the foot bone, toe cap on the toes.
+    const ballX = joints[`ball.${tag}`]![0] - sin * 22;
+    const tipY = tip[1] + Math.abs(cos) * 6;
     parts.push({
-      name: `foot.${tag}`, bone: `foot.${tag}`, z: lz + 2,
-      paths: [{ d: capsule(heel, [tip[0], tip[1] + Math.abs(cos) * 6], 27 * b, 24 * b), ...ink(p.shoes) }],
+      name: `toes.${tag}`, bone: `toes.${tag}`, z: lz + 2,
+      paths: [{ d: capsule([ballX - sin * 10, (heel[1] + tipY) / 2], [tip[0], tipY], 25.5 * b, 24 * b), ...ink(p.shoes) }],
+    });
+    parts.push({
+      name: `foot.${tag}`, bone: `foot.${tag}`, z: lz + 2.5,
+      paths: [{ d: capsule(heel, [ballX, (heel[1] + tipY) / 2], 27 * b, 26 * b), ...ink(p.shoes) }],
     });
   }
 
@@ -196,7 +239,7 @@ function buildView(view: ViewName, p: HumanoidParams): ViewSpec {
   if (p.hairStyle !== 'bald') {
     if (p.hairStyle === 'long') {
       parts.push({
-        name: 'hairBack', bone: 'head', z: back ? 36 : -30,
+        name: 'hairBack', bone: 'hair', z: back ? 36 : -30,
         paths: [{
           d: blob([
             [cx - rx * 1.12 - sin * 20, cy - ry * 0.2], [cx - sin * 30, cy - ry * 1.12], [cx + rx * 1.12 - sin * 30, cy - ry * 0.2],

@@ -4,7 +4,7 @@
  * unless it runs inside `doc.transact` / `doc.begin`.
  */
 import {
-  animated, COMMON_ANIM_PROPS, EXTRA_ANIM_PROPS, getEval, hasKeyAt, removeKeyAt, upsertKey, type EvalScene,
+  animated, COMMON_ANIM_PROPS, EXTRA_ANIM_PROPS, getEval, hasKeyAt, removeKeyAt, upsertKey, type EvalScene, evaluateScene,
 } from '../core/anim';
 import { exposureAt } from '../core/drawing';
 import { createGroup, createScene } from '../core/factory';
@@ -45,6 +45,7 @@ export function evalNow(): EvalScene {
 }
 
 export function isAnimatable(n: SceneNode, prop: string): boolean {
+  if (n.type === 'model3d' && prop.startsWith('j:')) return true;
   return COMMON_ANIM_PROPS.includes(prop) || (EXTRA_ANIM_PROPS[n.type] ?? []).includes(prop);
 }
 
@@ -108,7 +109,7 @@ export function writeProps(s: Scene, id: ID, values: Record<string, KeyValue>, o
       const tr = (tracks[prop] ??= { keys: [] });
       if (tr.keys.length === 0 && o.key === 'auto' && o.frame > 0) {
         // First auto-key away from frame 0: pin the old value at the start so the change animates.
-        const old = boneChannel ? (n as BoneNode).pose[prop as keyof BoneNode['pose']] : rec[prop];
+        const old = boneChannel ? (n as BoneNode).pose[prop as keyof BoneNode['pose']] : rec[prop] ?? (prop.startsWith('j:') ? 0 : undefined);
         if (old !== undefined) tr.keys.push({ f: 0, v: old, e: o.ease });
       }
       const existing = tr.keys.find((k) => Math.abs(k.f - o.frame) < 1e-6);
@@ -422,6 +423,7 @@ export function duplicateNodes(ids: ID[], offset = 30): ID[] {
  */
 export function moveNodes(ids: ID[], newParent: ID | null, index?: number, keepWorld = true): void {
   const s0 = scene();
+  const p0 = project();
   const es = evalNow();
   const tops = topLevel(s0, ids).filter((id) => id !== newParent && !(newParent && subtreeIds(s0, id).includes(newParent)));
   if (tops.length === 0) return;
@@ -451,6 +453,34 @@ export function moveNodes(ids: ID[], newParent: ID | null, index?: number, keepW
           Object.assign(n, { x: local.x, y: local.y, rotation: local.rotation, scaleX: local.scaleX, scaleY: local.scaleY });
         }
         n.depth = depthDelta;
+        // A layer whose position is animated must keep its whole path, not just today's frame:
+        // every keyed frame is re-expressed in the new parent's space as that parent is then.
+        const tracks = n.type === 'bone' ? undefined : s.anim[id];
+        const moved = ['x', 'y', 'rotation', 'scaleX', 'scaleY'].filter((prop) => tracks?.[prop]?.keys.length);
+        if (tracks && moved.length) {
+          const frames = [...new Set(moved.flatMap((prop) => tracks[prop].keys.map((k) => k.f)))].sort((a, b) => a - b);
+          const at = frames.map((f) => {
+            const then = evaluateScene(p0, s0, f);
+            const w = then.nodes.get(id)?.world ?? IDENTITY;
+            const parentThen = newParent ? then.nodes.get(newParent)?.world ?? IDENTITY : IDENTITY;
+            return decompose(mul(invert(parentThen), w));
+          });
+          for (const prop of ['x', 'y', 'rotation', 'scaleX', 'scaleY'] as const) {
+            const old = tracks[prop]?.keys ?? [];
+            // Rotation is unwrapped so a turn never takes the long way round between two keys.
+            let last = 0;
+            tracks[prop] = {
+              keys: frames.map((f, i) => {
+                let v = at[i][prop];
+                if (prop === 'rotation') {
+                  if (i > 0) v += Math.round((last - v) / 360) * 360;
+                  last = v;
+                }
+                return { f, v, e: old.find((k) => k.f === f)?.e ?? old[0]?.e ?? 'easeInOut' };
+              }),
+            };
+          }
+        }
       }
     }
   });

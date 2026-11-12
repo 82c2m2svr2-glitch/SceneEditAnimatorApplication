@@ -100,7 +100,7 @@ export function extractSubtree(project: Project, scene: Scene, rootIds: ID[], na
     const n = scene.nodes[id];
     nodes[id] = n;
     if (scene.anim[id]) anim[id] = scene.anim[id];
-    if (n.type === 'image' && project.assets[n.assetId]) assets[n.assetId] = project.assets[n.assetId];
+    if ((n.type === 'image' || n.type === 'model3d') && project.assets[n.assetId]) assets[n.assetId] = project.assets[n.assetId];
   }
   const constraints = scene.constraints.filter((c) => ids.has(c.targetId) && c.bones.every((b) => ids.has(b)));
   const strips = scene.strips.filter((s) => ids.has(s.targetId));

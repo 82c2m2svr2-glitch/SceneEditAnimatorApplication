@@ -44,15 +44,32 @@ export interface Project {
 export interface Asset {
   id: ID;
   name: string;
-  kind: 'image' | 'audio';
+  /**
+   * `model` is a 3D file (glTF, GLB or OBJ) or a built-in solid; `character3d` is a 3D character
+   * generated from a character spec.
+   */
+  kind: 'image' | 'audio' | 'model' | 'character3d';
   mime: string;
-  /** Self-contained data URL so a project is a single portable file. */
+  /** Self-contained data URL so a project is a single portable file. Empty for generated 3D assets. */
   dataUrl: string;
   width?: number;
   height?: number;
   /** Seconds, audio only. */
   duration?: number;
+  /**
+   * 3D models: file format; `solid` for a built-in shape described by `solid`; or `relief` for a
+   * picture (in `dataUrl`) puffed up into a rounded 3D object.
+   */
+  format?: 'glb' | 'gltf' | 'obj' | 'solid' | 'relief';
+  /** Relief models: thickness relative to the picture's size, about 0.2 (flat) to 1 (ball-like). */
+  depth?: number;
+  solid?: { shape: SolidShape; color: string };
+  /** 3D characters: the turnaround the model is generated from (a CharacterSpec). */
+  spec?: unknown;
 }
+
+export const SOLID_SHAPES = ['box', 'sphere', 'cylinder', 'cone', 'torus', 'capsule'] as const;
+export type SolidShape = (typeof SOLID_SHAPES)[number];
 
 // ---------------------------------------------------------------------------------------------
 // Scene
@@ -162,6 +179,11 @@ export interface ActionClip {
   category: string;
   /** node name -> property -> track */
   tracks: Record<string, Record<string, Track>>;
+  /**
+   * Versions of the clip for particular character views. When the character is in one of these
+   * views its tracks replace `tracks` entirely, so one clip can look right from every angle.
+   */
+  viewTracks?: Partial<Record<ViewName, Record<string, Record<string, Track>>>>;
 }
 
 export interface ActionStrip {
@@ -471,8 +493,45 @@ export interface ParticlesNode extends NodeBase {
   config: ParticleConfig;
 }
 
+/**
+ * A 3D model drawn into the 2D scene. It is rendered with flat cel shading and an ink outline into
+ * a `width` x `height` box centred on the node, so it layers, moves and parallaxes like any other
+ * 2D layer while still being able to turn in three dimensions.
+ */
+export interface Model3DNode extends NodeBase {
+  type: 'model3d';
+  assetId: ID;
+  width: number;
+  height: number;
+  /** Orientation of the model in degrees: tilt (X), turn (Y) and roll (Z). Animatable. */
+  rotX: number;
+  rotY: number;
+  rotZ: number;
+  /** Number of flat light bands: 1 is unlit flat colour, 2 adds one shadow tone, 3 a mid tone too. */
+  shadeSteps: number;
+  /** How dark the shadow tone is, 0 (none) to 1 (black). */
+  shade: number;
+  /** Ink outline thickness as a percentage of the model's size; 0 turns it off. */
+  outline: number;
+  outlineColor: string;
+  /** Direction the light comes from, in degrees clockwise from the top of the picture. */
+  lightAngle: number;
+  /** Animation clip from the model file to play, by name. */
+  clip: string | null;
+  /** Clip playback speed relative to the timeline; 0 holds the clip at `clipTime`. */
+  clipSpeed: number;
+  /** Clip time offset in seconds. Animatable. */
+  clipTime: number;
+  /**
+   * Extra 3D rotation of one joint of the model, in degrees about one axis, keyed as
+   * `j:<joint name>:<x|y|z>`. Every joint of every model can be posed and animated this way.
+   */
+  [joint: `j:${string}`]: number;
+}
+
 export type SceneNode =
   | GroupNode
+  | Model3DNode
   | ShapeNode
   | ImageNode
   | TextNode

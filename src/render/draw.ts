@@ -11,6 +11,7 @@ import type {
   TextNode,
 } from '../core/types';
 import { getImage } from './images';
+import { modelPicture } from './models';
 import { dofBlur, viewMatrix } from './view';
 
 export type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -360,6 +361,16 @@ function drawLeaf(ctx: Ctx2D, it: DrawItem, env: Env, alpha: number, blend: Glob
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, -n.width / 2, -n.height / 2, n.width, n.height);
       }
+      break;
+    }
+    case 'model3d': {
+      const m = mul(base, en.world);
+      // Render at the size the model has on screen, so it is as crisp as vector art at any zoom.
+      const pic = modelPicture(p, env.es, en, n.height * Math.hypot(m[2], m[3]));
+      if (!pic) break;
+      setMat(ctx, m);
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(pic, -n.width / 2, -n.height / 2, n.width, n.height);
       break;
     }
     case 'text': {

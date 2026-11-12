@@ -53,3 +53,16 @@ waveform peaks) myself, with tests and a browser scenario (`e2e/scenarios/trace-
 Do not start either; discard any local work on them. What remains for you is C4 (core unit tests)
 and C5 (review), in that order. `src/core/trace.ts` and `src/audio/lipsync.ts` are fair game for
 both: tests that break them and review findings are welcome in `from-codex.md`.
+
+## 2026-11-12 — version 0.2.0: skeleton, 3D and new builders
+
+Large change on the integration branch; rebase before touching anything.
+- The standard skeleton grew from 17 to 27 bones (`src/core/character/spec.ts`): chest, hair,
+  clavicle, fingers, thumb and toes were added. Landmarks are now split into `CORE_JOINT_NAMES`
+  (required) and `EXTRA_JOINT_NAMES` (optional, filled in by `completeJoints`).
+- Action clips can carry per-view versions (`ActionClip.viewTracks`); the evaluator picks by the
+  character's view. All built-ins now fit every view.
+- New node type `model3d` and the 3D engine in `src/render/three/engine.ts` (three.js, loaded on
+  demand). `src/core/character/model3d.ts` builds a 3D body from a CharacterSpec.
+- For C4, the new pure modules worth testing are `model3d.ts`, `completeJoints`, the per-view
+  action helpers in `actions.ts`, and `moveNodes` keyframe rewriting in `src/state/commands.ts`.

@@ -1,11 +1,11 @@
-import { FileAudio, ImagePlus, Music, Plus, Save, Trash2, Undo2 } from 'lucide-react';
+import { Box, FileAudio, ImagePlus, Music, Plus, Save, Sparkles, Trash2, Undo2 } from 'lucide-react';
 import { useState } from 'react';
 import { importAudio, placeAudio } from '../audio/engine';
 import { actionFitsView } from '../core/character/actions';
 import { ancestorOfType, subtreeIds } from '../core/tree';
 import type { ActionClip, ID, Scene } from '../core/types';
 import { removeAction, removeAsset } from '../state/commands';
-import { applyAction, builtins, importImage, placeImage, readAsDataUrl, saveAsAction } from '../state/content';
+import { applyAction, builtins, importImage, importModel, placeImage, placeModel, readAsDataUrl, saveAsAction } from '../state/content';
 import { pickFile } from '../state/persistence';
 import { doc, useDocRevision } from '../state/store';
 import { ui, useUI } from '../state/ui';
@@ -18,6 +18,17 @@ export async function importImagesDialog(): Promise<void> {
       placeImage(await importImage(f.name, await readAsDataUrl(f), f.type));
     } catch {
       ui().toast(`Could not import "${f.name}".`, 'error');
+    }
+  }
+}
+
+export async function importModelsDialog(): Promise<void> {
+  const files = await pickFile('.glb,.gltf,.obj,model/gltf-binary,model/gltf+json', true);
+  for (const f of files) {
+    try {
+      placeModel(await importModel(f));
+    } catch (err) {
+      ui().toast(err instanceof Error ? err.message : `Could not import "${f.name}".`, 'error');
     }
   }
 }
@@ -37,12 +48,16 @@ export function AssetsPanel() {
       <div style={{ display: 'flex', gap: 6, padding: 8 }}>
         <button className="btn" style={{ flex: 1 }} onClick={() => void importImagesDialog()}><ImagePlus size={14} /> Import images</button>
         <button className="btn" style={{ flex: 1 }} onClick={() => void importAudioDialog()}><FileAudio size={14} /> Import audio</button>
+        <button className="btn" style={{ flex: 1 }} title="Import 3D models (.glb, .gltf, .obj). They are drawn cel-shaded so they match 2D art." onClick={() => void importModelsDialog()}><Box size={14} /> Import 3D</button>
       </div>
-      {assets.length === 0 && <div className="empty">Imported images and sounds appear here. Click one to place it in the scene at the playhead.</div>}
+      <div style={{ padding: '0 8px 8px' }}>
+        <button className="btn" style={{ width: '100%' }} title="Generate backgrounds, props, scenery and textures with your OpenAI key" onClick={() => ui().set({ dialog: 'assetBuilder' })}><Sparkles size={14} /> Asset Builder (AI)</button>
+      </div>
+      {assets.length === 0 && <div className="empty">Imported images, sounds and 3D models appear here. Click one to place it in the scene at the playhead.</div>}
       <div className="asset-grid">
         {assets.map((a) => (
-          <div key={a.id} className="asset" title={`${a.name}\nClick to add to the scene`} onClick={() => (a.kind === 'image' ? placeImage(a) : placeAudio(a))}>
-            {a.kind === 'image' ? <img src={a.dataUrl} alt="" draggable={false} /> : <div className="audio-ico"><Music size={22} /></div>}
+          <div key={a.id} className="asset" title={`${a.name}\nClick to add to the scene`} onClick={() => (a.kind === 'image' ? placeImage(a) : a.kind === 'audio' ? placeAudio(a) : a.kind === 'model' ? placeModel(a) : ui().toast('This 3D body belongs to its character. Duplicate the character to make another.', 'info'))}>
+            {a.kind === 'image' ? <img src={a.dataUrl} alt="" draggable={false} /> : <div className="audio-ico">{a.kind === 'audio' ? <Music size={22} /> : <Box size={22} />}</div>}
             <small>{a.name}</small>
             <button className="icon-btn sm del" title="Delete asset" onClick={(e) => { e.stopPropagation(); removeAsset(a.id); }}><Trash2 size={11} /></button>
           </div>

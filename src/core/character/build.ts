@@ -3,7 +3,7 @@ import { apply, invert, mul, trs, type Rect, unionRect } from '../math';
 import { parseSvgPath, pathBounds, transformPath } from '../path';
 import { VIEW_NAMES, type BoneNode, type BoneRest, type ID, type Mat, type SceneNode, type ViewName } from '../types';
 import {
-  BONE_DEFS, BONE_NAMES, JOINT_NAMES, VISEMES, type BoneName, type CharacterSpec, type FaceSpec, type PartPath,
+  BONE_DEFS, BONE_NAMES, VISEMES, completeJoints, type BoneName, type CharacterSpec, type FaceSpec, type PartPath,
   type ViewSpec, type Viseme,
 } from './spec';
 
@@ -13,7 +13,7 @@ export interface BuiltCharacter {
   bones: Record<BoneName, ID>;
 }
 
-interface ViewFrame {
+export interface ViewFrame {
   /** View image coordinates -> character space (origin at the ground between the feet). */
   norm: Mat;
   scale: number;
@@ -22,11 +22,8 @@ interface ViewFrame {
   rest: Record<BoneName, BoneRest>;
 }
 
-function frameFor(view: ViewSpec, height: number): ViewFrame {
-  const j = view.joints;
-  for (const name of JOINT_NAMES) {
-    if (!j[name] || !Number.isFinite(j[name][0]) || !Number.isFinite(j[name][1])) throw new Error(`Character view is missing joint "${name}"`);
-  }
+export function frameFor(view: ViewSpec, height: number): ViewFrame {
+  const j = completeJoints(view.joints);
   const ground = Math.max(j['toe.L'][1], j['toe.R'][1], j['ankle.L'][1], j['ankle.R'][1]);
   const top = j.headTop[1];
   const h = Math.max(1, ground - top);
@@ -133,14 +130,22 @@ export function mouthPaths(v: Viseme, cx: number, cy: number, w: number, face: F
   }
 }
 
-function boundsOf(paths: PartPath[]): Rect | null {
+/** The line drawn in place of an eye when it is closed, or curved upward in a smile. */
+export function lidPath(state: 'closed' | 'happy', b: Rect, line: string, width: number): PartPath {
+  const d = state === 'closed'
+    ? `M${b.x} ${b.y + b.h * 0.55}Q${b.x + b.w / 2} ${b.y + b.h * 0.95} ${b.x + b.w} ${b.y + b.h * 0.55}`
+    : `M${b.x} ${b.y + b.h * 0.7}Q${b.x + b.w / 2} ${b.y + b.h * 0.05} ${b.x + b.w} ${b.y + b.h * 0.7}`;
+  return { d, fill: null, stroke: line, strokeWidth: width };
+}
+
+export function boundsOf(paths: PartPath[]): Rect | null {
   let b: Rect | null = null;
   for (const p of paths) b = unionRect(b, pathBounds(parseSvgPath(p.d)));
   return b;
 }
 
 /** Builds the rigged node hierarchy for a character spec. Nodes are linked but not yet in a scene. */
-export function buildCharacter(spec: CharacterSpec): BuiltCharacter {
+export function buildCharacter(spec: CharacterSpec, opts: { skeletonOnly?: boolean } = {}): BuiltCharacter {
   const views = VIEW_NAMES.filter((v) => spec.views[v]);
   if (views.length === 0) throw new Error('Character spec has no views');
   const height = spec.height ?? 600;
@@ -173,6 +178,9 @@ export function buildCharacter(spec: CharacterSpec): BuiltCharacter {
     boneNodes[name] = b;
     link(b, name === 'root' ? character.id : bones[BONE_DEFS[name].parent]);
   }
+
+  // A 3D character keeps the same skeleton, but its artwork is a 3D model instead of flat parts.
+  if (opts.skeletonOnly) return { nodes, rootId: character.id, bones };
 
   for (const v of views) {
     const vs = spec.views[v]!;
@@ -213,12 +221,8 @@ export function buildCharacter(spec: CharacterSpec): BuiltCharacter {
       };
       addState('open', (eye) => eye.paths);
       const lid = Math.max(1.5, 0.012 * (height / f.scale));
-      addState('closed', (_e, b) => [
-        { d: `M${b.x} ${b.y + b.h * 0.55}Q${b.x + b.w / 2} ${b.y + b.h * 0.95} ${b.x + b.w} ${b.y + b.h * 0.55}`, fill: null, stroke: line, strokeWidth: lid },
-      ]);
-      addState('happy', (_e, b) => [
-        { d: `M${b.x} ${b.y + b.h * 0.7}Q${b.x + b.w / 2} ${b.y + b.h * 0.05} ${b.x + b.w} ${b.y + b.h * 0.7}`, fill: null, stroke: line, strokeWidth: lid },
-      ]);
+      addState('closed', (_e, b) => [lidPath('closed', b, line, lid)]);
+      addState('happy', (_e, b) => [lidPath('happy', b, line, lid)]);
     }
     if (face.mouth) {
       const m = face.mouth;

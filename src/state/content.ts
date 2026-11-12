@@ -5,9 +5,10 @@
 import { boneTip, nameIndex } from '../core/anim';
 import { builtinActions } from '../core/character/actions';
 import { buildCharacter } from '../core/character/build';
+import { buildCharacter3D } from '../core/character/model3d';
 import { humanoidSpec, type HumanoidParams } from '../core/character/humanoid';
 import type { CharacterSpec } from '../core/character/spec';
-import { createGroup, createImage, createParticles, createShape } from '../core/factory';
+import { createGroup, createImage, createModel3D, createParticles, createShape } from '../core/factory';
 import { newId } from '../core/ids';
 import { apply, IDENTITY, invert } from '../core/math';
 import { PARTICLE_PRESETS } from '../core/particles';
@@ -15,7 +16,7 @@ import { transformPath } from '../core/path';
 import { autoWeights, computeBind, gridMesh, type BoneSegment } from '../core/skin';
 import type { TracedShape } from '../core/trace';
 import { ancestorOfType, extractSubtree, insertBundle, subtreeIds, topLevel, type RigFile } from '../core/tree';
-import type { ActionClip, Asset, ID, ImageNode, Keyframe, ShapeNode, Track } from '../core/types';
+import type { ActionClip, Asset, ID, ImageNode, Keyframe, ShapeNode, SolidShape, Track } from '../core/types';
 import { imageSize } from '../render/images';
 import { addAction, addAsset, addConstraint, addNode, addNodes, addStrip, evalNow, patchNode, scene } from './commands';
 import { doc, project } from './store';
@@ -36,6 +37,30 @@ export function addCharacterFromSpec(spec: CharacterSpec, at?: { x: number; y: n
 
 export function addHumanoid(params: Partial<HumanoidParams> = {}, at?: { x: number; y: number }): ID {
   return addCharacterFromSpec(humanoidSpec(params), at);
+}
+
+/**
+ * Adds a character whose body is a 3D model generated from the same turnaround. It keeps the 2D
+ * skeleton, so posing, actions, views and lip-sync work exactly as they do for a flat character.
+ */
+export function addCharacter3DFromSpec(spec: CharacterSpec, at?: { x: number; y: number }): ID {
+  const p = project();
+  // Fails early, with a readable message, if the turnaround cannot be turned into a solid body.
+  const height = buildCharacter3D(spec).height;
+  const built = buildCharacter(spec, { skeletonOnly: true });
+  const root = built.nodes.find((n) => n.id === built.rootId)!;
+  root.x = at?.x ?? p.width / 2;
+  root.y = at?.y ?? Math.round(p.height * 0.86);
+  const asset: Asset = { id: newId('mdl'), name: `${spec.name || 'Character'} (3D)`, kind: 'character3d', mime: 'application/json', dataUrl: '', spec };
+  // The model is drawn in a box big enough for raised arms and jumps, centred on the middle of the body.
+  const body = createModel3D('Body (3D)', asset.id, height * 1.7, { y: -height / 2, parent: root.id, locked: true });
+  root.children.unshift(body.id);
+  doc.transact('Add 3D character', () => {
+    addAsset(asset);
+    addNodes([...built.nodes, body], [built.rootId], null, 'Add 3D character');
+  });
+  ui().select([built.rootId]);
+  return built.rootId;
 }
 
 // --- actions ---------------------------------------------------------------------------------
@@ -134,6 +159,74 @@ export function placeImage(asset: Asset, at?: { x: number; y: number }): ID {
   addNode(node, null, undefined, 'Place image');
   ui().select([node.id]);
   return node.id;
+}
+
+const MODEL_FORMATS: Record<string, Asset['format']> = { glb: 'glb', gltf: 'gltf', obj: 'obj' };
+
+/** File extension check for 3D model files DreamForge can import. */
+export function isModelFile(name: string): boolean {
+  return (name.split('.').pop() ?? '').toLowerCase() in MODEL_FORMATS;
+}
+
+/** Imports a 3D model file (.glb, .gltf or .obj) as an asset. */
+export async function importModel(file: File): Promise<Asset> {
+  const format = MODEL_FORMATS[(file.name.split('.').pop() ?? '').toLowerCase()];
+  if (!format) throw new Error(`"${file.name}" is not a 3D model DreamForge can import (use .glb, .gltf or .obj).`);
+  const asset: Asset = { id: newId('mdl'), name: file.name, kind: 'model', mime: file.type || 'model/gltf-binary', dataUrl: await readAsDataUrl(file), format };
+  addAsset(asset);
+  return asset;
+}
+
+/** Adds a 3D model asset to the scene as a cel-shaded layer. */
+export function placeModel(asset: Asset, at?: { x: number; y: number }): ID {
+  const p = project();
+  const node = createModel3D(asset.name.replace(/\.[a-z0-9]+$/i, ''), asset.id, Math.round(Math.min(p.width, p.height) * 0.5));
+  node.x = at?.x ?? p.width / 2;
+  node.y = at?.y ?? p.height / 2;
+  addNode(node, null, undefined, 'Place 3D model');
+  ui().select([node.id]);
+  return node.id;
+}
+
+/** Adds a built-in 3D solid (box, sphere, ...) to the scene. */
+export function addSolid(shape: SolidShape, color = '#7c5cff', at?: { x: number; y: number }): ID {
+  const name = shape[0].toUpperCase() + shape.slice(1);
+  const asset: Asset = { id: newId('mdl'), name: `${name} (3D)`, kind: 'model', mime: '', dataUrl: '', format: 'solid', solid: { shape, color } };
+  return doc.transact('Add 3D shape', () => {
+    addAsset(asset);
+    const id = placeModel(asset, at);
+    patchNode(id, { name, rotX: 20, rotY: 30 }, 'Add 3D shape');
+    return id;
+  });
+}
+
+/**
+ * Turns a picture into a 3D object: the picture is puffed up into a rounded solid that can turn in
+ * depth. Works best on a cut-out (transparent background) of a single object.
+ */
+export function addReliefModel(name: string, dataUrl: string, size?: { width?: number; height?: number }, at?: { x: number; y: number }): ID {
+  const asset: Asset = { id: newId('mdl'), name: `${name} (3D)`, kind: 'model', mime: 'image/png', dataUrl, format: 'relief', depth: 0.55, width: size?.width, height: size?.height };
+  return doc.transact('Add 3D object', () => {
+    addAsset(asset);
+    const id = placeModel(asset, at);
+    patchNode(id, { name, outline: 0, rotY: -25 }, 'Add 3D object');
+    return id;
+  });
+}
+
+/** Replaces an image layer with a 3D object made from the same picture. The image is kept, hidden. */
+export function imageTo3D(imageId: ID): ID | null {
+  const n = scene().nodes[imageId] as ImageNode | undefined;
+  const asset = n && n.type === 'image' ? project().assets[n.assetId] : undefined;
+  if (!n || !asset) return null;
+  return doc.transact('Turn into 3D object', () => {
+    const id = addReliefModel(n.name, asset.dataUrl, asset, { x: n.x, y: n.y });
+    // The camera frames the model's bounding sphere, so the box is a little larger than the picture.
+    const box = Math.hypot(n.width, n.height) * 1.12;
+    patchNode(id, { width: box, height: box, rotation: n.rotation, scaleX: n.scaleX, scaleY: n.scaleY, depth: n.depth, zOrder: n.zOrder, opacity: n.opacity, rotY: 0 }, 'Turn into 3D object');
+    patchNode(imageId, { visible: false }, 'Turn into 3D object');
+    return id;
+  });
 }
 
 /** Decodes an image asset to pixels, scaled down so its longer side is at most `maxSide`. */

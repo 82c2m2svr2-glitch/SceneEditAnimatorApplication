@@ -1,10 +1,13 @@
 import { Bot, Download, Settings, Wand2 } from 'lucide-react';
-import { importAudioDialog, importImagesDialog } from './Panels';
+import { importAudioDialog, importImagesDialog, importModelsDialog } from './Panels';
+import { humanoidSpec } from '../core/character/humanoid';
+import { SOLID_SHAPES } from '../core/types';
+import { APP_VERSION } from '../state/updates';
 import { createDrawing, createGroup, createRect, createShape, createText } from '../core/factory';
 import { ellipsePath, starPath } from '../core/path';
 import { PARTICLE_PRESETS } from '../core/particles';
 import { addNode, deleteNodes, duplicateNodes, groupNodes, keyNodes, reorder, scene, ungroup } from '../state/commands';
-import { addHumanoid, addIKForBone, addParticlePreset, bindSkin, copySelection, exportRig, importRig, paste } from '../state/content';
+import { addCharacter3DFromSpec, addCharacterFromSpec, addIKForBone, addParticlePreset, addSolid, bindSkin, copySelection, exportRig, importRig, paste } from '../state/content';
 import { downloadBlob, openProjectFile, pickFile, saveProjectFile } from '../state/persistence';
 import { closeProject } from '../state/session';
 import { doc, useDocRevision } from '../state/store';
@@ -22,15 +25,15 @@ const PALETTES = [
   { skin: '#ffe0c2', hair: '#b5462f', shirt: '#9b5de5', pants: '#1f2233' },
 ];
 
-export function insertSampleCharacter(): void {
+export function insertSampleCharacter(threeD = false): void {
   const s = scene();
   const count = Object.values(s.nodes).filter((n) => n.type === 'character').length;
   const p = doc.project!;
   const pal = PALETTES[count % PALETTES.length];
-  addHumanoid(
-    { name: `Character ${count + 1}`, ...pal, hairStyle: HAIR[count % HAIR.length], height: Math.round(p.height * 0.55) },
-    { x: p.width * (0.3 + ((count * 0.2) % 0.5)), y: Math.round(p.height * 0.86) },
-  );
+  const spec = humanoidSpec({ name: `Character ${count + 1}`, ...pal, hairStyle: HAIR[count % HAIR.length], height: Math.round(p.height * 0.55) });
+  const at = { x: p.width * (0.3 + ((count * 0.2) % 0.5)), y: Math.round(p.height * 0.86) };
+  if (threeD) addCharacter3DFromSpec(spec, at);
+  else addCharacterFromSpec(spec, at);
 }
 
 async function importRigDialog(): Promise<void> {
@@ -77,6 +80,7 @@ export function MenuBar() {
             <div className="menu-sep" />
             <MenuItem label="Import images…" onClick={() => { close(); void importImagesDialog(); }} />
             <MenuItem label="Import audio…" onClick={() => { close(); void importAudioDialog(); }} />
+            <MenuItem label="Import 3D model (.glb, .gltf, .obj)…" onClick={() => { close(); void importModelsDialog(); }} />
             <MenuItem label="Import character file…" onClick={() => { close(); void importRigDialog(); }} />
             <MenuItem label="Export selected as character file" disabled={!has} onClick={() => { close(); exportRigFile(); }} />
             <div className="menu-sep" />
@@ -111,7 +115,9 @@ export function MenuBar() {
         {(close) => (
           <>
             <MenuItem label="Sample character (rigged, 5 views)" onClick={() => { close(); insertSampleCharacter(); }} />
+            <MenuItem label="Sample 3D character (same rig, drawn cel-shaded)" onClick={() => { close(); insertSampleCharacter(true); }} />
             <MenuItem label="Character Creator (AI)…" onClick={() => { close(); set({ dialog: 'characterCreator' }); }} />
+            <MenuItem label="Asset Builder (AI)…" onClick={() => { close(); set({ dialog: 'assetBuilder' }); }} />
             <div className="menu-sep" />
             <MenuItem label="Rectangle" onClick={() => { close(); insert(() => createRect('Rectangle', 300, 200, ui().fill ?? '#7c5cff')); }} />
             <MenuItem label="Ellipse" onClick={() => { close(); insert(() => createShape('Ellipse', ellipsePath(0, 0, 150, 150), { fill: ui().fill })); }} />
@@ -119,6 +125,8 @@ export function MenuBar() {
             <MenuItem label="Text" onClick={() => { close(); insert(() => createText('Text')); }} />
             <MenuItem label="Drawing layer" onClick={() => { close(); const n = createDrawing(); addNode(n); ui().select([n.id]); set({ tool: 'brush' }); }} />
             <MenuItem label="Empty group" onClick={() => { close(); insert(() => createGroup('Group')); }} />
+            <div className="menu-sep" />
+            {SOLID_SHAPES.map((k) => <MenuItem key={k} label={`3D shape: ${k}`} onClick={() => { close(); addSolid(k, ui().fill ?? '#7c5cff'); }} />)}
             <div className="menu-sep" />
             {Object.keys(PARTICLE_PRESETS).map((k) => <MenuItem key={k} label={`Particles: ${k}`} onClick={() => { close(); addParticlePreset(k); }} />)}
           </>
@@ -145,6 +153,7 @@ export function MenuBar() {
             <MenuItem label="Timeline" onClick={() => { close(); set({ bottomPanel: 'timeline' }); }} />
             <MenuItem label="Graph editor" onClick={() => { close(); set({ bottomPanel: 'graph' }); }} />
             <MenuItem label="Keyboard shortcuts" kbd="?" onClick={() => { close(); set({ dialog: 'shortcuts' }); }} />
+            <MenuItem label={`Check for updates… (version ${APP_VERSION})`} onClick={() => { close(); set({ dialog: 'update' }); }} />
           </>
         )}
       </Menu>

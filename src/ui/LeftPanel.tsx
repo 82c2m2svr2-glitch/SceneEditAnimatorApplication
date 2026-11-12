@@ -10,6 +10,7 @@ import { useUI } from '../state/ui';
 import { TextField } from './widgets';
 
 const ICONS: Record<NodeType, React.ReactNode> = {
+  model3d: <Box size={13} />,
   group: <Folder size={13} />, shape: <Shapes size={13} />, image: <Image size={13} />, text: <Type size={13} />,
   bone: <Bone size={13} />, character: <User size={13} />, switch: <ToggleLeft size={13} />, drawing: <PenLine size={13} />,
   particles: <Sparkles size={13} />,
